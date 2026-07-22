@@ -1,0 +1,29 @@
+0.9.6 modified files relative to 0.9.5
+
+Locales/ch.json
+Locales/cz.json
+code/XuanJianVNext/Data/Alchemy/XjAlchemyDefinitions.cs
+code/XuanJianVNext/Data/Alchemy/XjAlchemyText.cs
+code/XuanJianVNext/Data/Codex/XjCodexSnapshotModels.cs
+code/XuanJianVNext/Systems/Alchemy/XjAlchemyAnnualSystem.cs
+code/XuanJianVNext/Systems/Alchemy/XjAlchemyInventoryRegistry.cs
+code/XuanJianVNext/Systems/Alchemy/XjAlchemyPillEffectSystem.cs
+code/XuanJianVNext/Systems/Codex/XjCodexSnapshotPublisher.Resources.cs
+code/XuanJianVNext/Systems/Codex/XjCodexSnapshotPublisher.cs
+code/XuanJianVNext/Systems/Craft/XjCraftDomainRegistry.cs
+code/XuanJianVNext/Systems/Craft/XjCraftProficiencySystem.cs
+code/XuanJianVNext/Systems/DongTian/XjSecretRealmConstructionSystem.cs
+code/XuanJianVNext/Systems/FaBao/XjArtifactForgeFuel.cs
+code/XuanJianVNext/Systems/FaBao/XjEquipmentForgeConsumer.cs
+code/XuanJianVNext/Systems/FaBao/XjFaBaoAcquisition.cs
+code/XuanJianVNext/Systems/FaBao/XjFaBaoForgePolicy.cs
+code/XuanJianVNext/Systems/Formation/XjFormationEngineeringSystem.cs
+code/XuanJianVNext/Systems/Formation/XjSectFormationOccupationAdapter.cs
+code/XuanJianVNext/Systems/Talisman/XjTalismanAnnualSystem.cs
+code/XuanJianVNext/UI/Alchemy/XjAlchemyUiModel.cs
+code/XuanJianVNext/UI/Codex/XjCodexWindow.Craft.cs
+code/XuanJianVNext/UI/Craft/XjCraftInventoryUiModel.cs
+mod.json
+
+Release package SHA-256
+fcc9cef57f4400c688afa7a1b765517e139c22d34cdb6a96eecd38fe7654080c
