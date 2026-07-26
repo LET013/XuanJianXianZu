@@ -113,12 +113,12 @@ internal static class XjQianKunDaiTabView
 			}
 		}
 
-		RenderAlchemySection(sections[0], "乾坤袋 · 药材", materials, font, "QianKunDaiMaterialSlot");
-		RenderEmptySection(sections[1], "乾坤袋 · 重宝", font);
+		RenderAlchemySection(sections[0], "乾坤袋·药材", materials, font, "QianKunDaiMaterialSlot");
+		RenderEmptySection(sections[1], "乾坤袋·重宝", font);
 
 		// Section 2: 功法
 		var gongFaItems = BuildGongFaItems(model);
-		if (XjNativeGenealogySectionRenderer.TryPrepare(sections[2], "乾坤袋 · 功法", font,
+		if (XjNativeGenealogySectionRenderer.TryPrepare(sections[2], "乾坤袋·功法", font,
 			XjIconShelfRenderer.CalculateMetrics(gongFaItems.Length, true),
 			out Transform gongFaGrid))
 		{
@@ -131,15 +131,15 @@ internal static class XjQianKunDaiTabView
 				XjTooltipBuilder.BuildGongFaTooltip(item, out string title, out string description, out string details);
 				XjIconShelfRenderer.CreateIconSlot(
 					gongFaGrid, "QianKunDaiGongFaSlot", sprite,
-					string.IsNullOrWhiteSpace(item.Name) ? "功法" : item.Name,
+					string.IsNullOrWhiteSpace(item.Name) ? "功" : item.Name,
 					item.Count, title, description, details, font);
 			}
 		}
 
-		RenderCraftSection(sections[3], "乾坤袋 · 符箓", talismans, font, "QianKunDaiTalismanSlot");
-		RenderCraftSection(sections[4], "乾坤袋 · 阵法材料", formationMaterials, font, "QianKunDaiFormationSlot");
-		RenderAlchemySection(sections[5], "乾坤袋 · 丹药", pills, font, "QianKunDaiPillSlot");
-		RenderAlchemySection(sections[6], "乾坤袋 · 丹方", recipes, font, "QianKunDaiRecipeSlot");
+		RenderCraftSection(sections[3], "乾坤袋·符箓", talismans, font, "QianKunDaiTalismanSlot");
+		RenderCraftSection(sections[4], "乾坤袋·阵法材料", formationMaterials, font, "QianKunDaiFormationSlot");
+		RenderAlchemySection(sections[5], "乾坤袋·丹药", pills, font, "QianKunDaiPillSlot");
+		RenderAlchemySection(sections[6], "乾坤袋·丹方", recipes, font, "QianKunDaiRecipeSlot");
 
 		XjNativeGenealogyTemplateProvider.ConvergeLayout(root, sections, 7);
 	}

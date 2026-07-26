@@ -732,7 +732,8 @@ internal static class XjBloodlineWindow
 	SetRect(line2.gameObject, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0.5f, 1f), new Vector2(8f, -56f), new Vector2(-20f, 18f));
 
 		TipButton tip = card.AddComponent<TipButton>();
-		XjNativeHoverTooltip.Ensure(tip, name, BuildFamilyTooltip(item), string.Empty);
+		tip.textOnClick = name;
+		tip.textOnClickDescription = BuildFamilyTooltip(item);
 	}
 
 	private static string FormatClanName(string clanName, string sampleName)

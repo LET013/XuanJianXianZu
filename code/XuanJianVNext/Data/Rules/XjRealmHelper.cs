@@ -1,5 +1,6 @@
 using System;
 using XuanJianVNext.Systems.ActorSystem;
+using XuanJianVNext.Systems.Runtime;
 
 namespace XuanJianVNext.Data.Rules;
 
@@ -146,6 +147,10 @@ internal static class XjRealmHelper
         if (actor?.data == null)
         {
             return string.Empty;
+        }
+        if (XjAnnualExecutionContext.TryResolveRealmOverride(actor, out string overrideRealmId))
+        {
+            return NormalizeId(overrideRealmId);
         }
 
         string stored = string.Empty;

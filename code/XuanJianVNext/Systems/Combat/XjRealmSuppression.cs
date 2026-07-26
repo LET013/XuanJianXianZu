@@ -5,6 +5,7 @@ using XuanJianVNext.Data.Rules;
 using XuanJianVNext.Systems.ActorSystem;
 using XuanJianVNext.Systems.Cultivation;
 using XuanJianVNext.Systems.FaBao;
+using XuanJianVNext.Systems.Runtime;
 
 namespace XuanJianVNext.Systems.Combat;
 
@@ -36,12 +37,14 @@ internal static class XjRealmSuppression
     {
         if (actor?.data == null)
             return TierNone;
+        if (XjAnnualExecutionContext.TryResolveRealmOverride(actor, out string overrideRealmId))
+            return GetRealmTierFromIdForRuntime(overrideRealmId);
 
         try
         {
             if (XjActorAccessor.TryGetString(actor, XjActorDataKeys.RealmId, out string realmId))
             {
-                int storedTier = GetRealmTierFromId(realmId);
+                int storedTier = GetRealmTierFromIdForRuntime(realmId);
                 if (storedTier > TierNone) return storedTier;
             }
 
@@ -56,7 +59,7 @@ internal static class XjRealmSuppression
         return TierNone;
     }
 
-    private static int GetRealmTierFromId(string realmId)
+    internal static int GetRealmTierFromIdForRuntime(string realmId)
     {
         if (string.Equals(realmId, XjRealmIds.JinDan, StringComparison.Ordinal)
             || string.Equals(realmId, XjRealmIds.ShenDan, StringComparison.Ordinal)) return TierJinDan;

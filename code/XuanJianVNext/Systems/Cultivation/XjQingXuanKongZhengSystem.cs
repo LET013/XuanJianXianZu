@@ -44,6 +44,28 @@ internal static class XjQingXuanKongZhengSystem
 			&& completed > 0;
 	}
 
+	internal static bool HasAnnualInterest(Actor actor, string realmId, string daoTu)
+	{
+		if (actor?.data == null
+			|| !string.Equals(realmId, XjRealmIds.LianQi, StringComparison.Ordinal)
+			|| !string.Equals(daoTu, SourceDaoTu, StringComparison.Ordinal)
+			|| CanEnterQingXuan(actor))
+		{
+			return false;
+		}
+
+		if (XjActorAccessor.TryGetInt(actor, XjActorDataKeys.QingXuanQingCanQi, out int qingCanQi)
+			&& qingCanQi > 0) return true;
+		if (XjActorAccessor.TryGetInt(actor, XjActorDataKeys.QingXuanChuYangJi, out int chuYangJi)
+			&& chuYangJi > 0) return true;
+		if (XjActorAccessor.TryGetInt(actor, XjActorDataKeys.QingXuanXuanYangZiFoundation, out int foundation)
+			&& foundation > 0) return true;
+
+		long actorId = ((BaseSystemData)actor.data).id;
+		return actorId > 0L
+			&& XjDeterministicHash.PositiveIndex(actorId, "qingxuan_entry_once", QingXuanEntryOdds) == 0;
+	}
+
 	internal static void TickActor(Actor actor, in XjActorCultivationSnapshot snapshot, int currentYear)
 	{
 		if (actor?.data == null

@@ -246,6 +246,46 @@ internal static class XjDetectionGate
 		return (year + offset) % intervalYears == 0;
 	}
 
+	internal static bool IsEntityMaintenanceDueBetween(
+		XjEntityDetectionJob job,
+		long entityId,
+		int fromYearInclusive,
+		int toYearInclusive)
+	{
+		return TryResolveLatestEntityMaintenanceYear(
+			job, entityId, fromYearInclusive, toYearInclusive, out _);
+	}
+
+	internal static bool TryResolveLatestEntityMaintenanceYear(
+		XjEntityDetectionJob job,
+		long entityId,
+		int fromYearInclusive,
+		int toYearInclusive,
+		out int dueYear)
+	{
+		dueYear = 0;
+		if (entityId <= 0L || toYearInclusive <= 0 || fromYearInclusive > toYearInclusive)
+		{
+			return false;
+		}
+
+		int intervalYears = ResolveEntityIntervalYears(job);
+		int fromYear = System.Math.Max(1, fromYearInclusive);
+		if (intervalYears <= 1)
+		{
+			dueYear = toYearInclusive;
+			return true;
+		}
+
+		int offset = ResolveEntityPhaseOffset(job, entityId, intervalYears);
+		int remainder = (toYearInclusive + offset) % intervalYears;
+		if (remainder < 0) remainder += intervalYears;
+		int candidate = toYearInclusive - remainder;
+		if (candidate < fromYear) return false;
+		dueYear = candidate;
+		return true;
+	}
+
 	internal static int ResolveEntityIntervalYears(XjEntityDetectionJob job)
 	{
 		return job switch

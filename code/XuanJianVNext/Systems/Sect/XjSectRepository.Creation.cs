@@ -196,7 +196,6 @@ internal static partial class XjSectRepository
 			long founderId = ((BaseSystemData)founder.data).id;
 			if (founderId <= 0L || founder.city?.data == null || founder.city.data.id != capital.data.id) return false;
 			if (TryGetByCity(capital, out _) || XjZongMenCityData.HasZongMen(capital)) return false;
-			if (TryResolveFamilySect(founderFamilyId, out _)) return false;
 			int year = Math.Max(Math.Max(0, currentYear), Math.Max(Math.Max(0, XjYearTracker.CurrentYear), Math.Max(0, World.world?.map_stats?.year ?? 0)));
 			int ziFuEnteredYear = XjCultivationStateTransitions.ReadZiFuEnteredYear(founder);
 			if (ziFuEnteredYear > 0) year = Math.Max(year, ziFuEnteredYear);

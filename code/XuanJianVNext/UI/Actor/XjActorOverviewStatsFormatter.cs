@@ -571,7 +571,9 @@ internal static class XjActorOverviewStatsFormatter
 		if (tip != null)
 		{
 			string localized = LM.Get("statsIcon_" + icon.Id);
-			XjNativeHoverTooltip.Ensure(tip, string.IsNullOrWhiteSpace(localized) || localized == "statsIcon_" + icon.Id ? icon.DisplayName : localized, string.Empty, string.Empty);
+			tip.textOnClick = string.IsNullOrWhiteSpace(localized) || localized == "statsIcon_" + icon.Id
+				? icon.DisplayName
+				: localized;
 		}
 	}
 

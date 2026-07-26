@@ -4,7 +4,7 @@ namespace XuanJianVNext.Systems.Archive;
 
 internal static class XjWorldSchemaGuard
 {
-	internal const int CurrentArchiveVersion = 108;
+	internal const int CurrentArchiveVersion = 109;
 	internal const int MinimumSupportedV1ArchiveVersion = 103;
 	internal static bool GameplayEnabled { get; private set; }
 	internal static bool UnsupportedLegacyWorld { get; private set; }

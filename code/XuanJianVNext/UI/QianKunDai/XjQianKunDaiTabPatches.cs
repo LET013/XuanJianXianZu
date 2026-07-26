@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Events;
@@ -13,7 +13,9 @@ internal static class XjQianKunDaiTabPatches
 {
 	private const string TabId = "xuanjian_vnext_qiankundai_tab";
 	private const string RootName = "XjQianKunDaiTabRoot";
+	private const int RefreshCadenceFrames = 40;
 	private static long _lastActorId;
+	private static int _lastRefreshFrame = -9999;
 	private static int _lastWorldYear = -1;
 
 	internal static bool TryAddOrUpdate(UnitWindow window)
@@ -82,15 +84,18 @@ internal static class XjQianKunDaiTabPatches
 	private static bool ShouldRefresh(Actor actor)
 	{
 		long actorId = actor?.data == null ? 0L : ((BaseSystemData)actor.data).id;
+		int frame = Time.frameCount;
 		int worldYear = World.world?.map_stats?.year ?? 0;
 		return actorId != _lastActorId
-			|| worldYear != _lastWorldYear;
+			|| worldYear != _lastWorldYear
+			|| frame - _lastRefreshFrame >= RefreshCadenceFrames;
 	}
 
 	private static void MarkRefreshed(Actor actor)
 	{
 		_lastActorId = actor?.data == null ? 0L : ((BaseSystemData)actor.data).id;
 		_lastWorldYear = World.world?.map_stats?.year ?? 0;
+		_lastRefreshFrame = Time.frameCount;
 	}
 
 	private static void HideExisting(ScrollWindow scrollWindow)
@@ -146,7 +151,7 @@ internal static class XjQianKunDaiTabPatches
 
 		if (tab._tip_button != null)
 		{
-			XjNativeHoverTooltip.Ensure(tab._tip_button, "乾坤袋", "查看此人的功法、符箓、丹药与随身传承。", string.Empty);
+			XjNativeHoverTooltip.Ensure(tab._tip_button, "乾坤袋", "乾坤袋", string.Empty);
 		}
 
 		Transform iconRoot = tab.transform.Find("Icon");

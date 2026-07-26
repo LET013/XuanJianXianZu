@@ -1,4 +1,4 @@
-using XuanJianVNext.Core;
+﻿using XuanJianVNext.Core;
 using XuanJianVNext.UI;
 
 public static class XuanJianConfig
@@ -35,6 +35,7 @@ public static class XuanJianConfig
 		XjRuntimeSettings.SetShowFpsOverlay(value);
 		XjFpsOverlay.SetEnabled(value);
 	}
+	public static void StageZeroObservationCallBack(bool value) => XjRuntimeSettings.SetStageZeroObservation(value);
 	public static void AllowSectRebellionCallBack(bool value) => XjRuntimeSettings.SetAllowSectRebellion(value);
 	public static void EnableYaoXieGenerationCallBack(bool value) => XjRuntimeSettings.SetSpawnJinXingYaoXie(value);
 	public static void EnableLongShuGenerationCallBack(bool value) => XjRuntimeSettings.SetSpawnLongShu(value);

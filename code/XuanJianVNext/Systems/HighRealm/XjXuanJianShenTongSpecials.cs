@@ -940,6 +940,9 @@ internal static class XjXuanJianShenTongSpecials
 
 		// 核心修炼从零开始。
 		XjActorAccessor.SetString(mirror, XjActorDataKeys.RealmId, string.Empty);
+		XjActorAccessor.SetInt(mirror, XjActorDataKeys.RealmEnteredYear, 0);
+		XjActorAccessor.SetInt(mirror, XjActorDataKeys.XjZhuJiEnteredYear, 0);
+		XjActorAccessor.SetInt(mirror, XjActorDataKeys.XjZiFuEnteredYear, 0);
 		XjActorAccessor.SetString(mirror, XjActorDataKeys.DaoTu, string.Empty);
 		XjActorAccessor.SetInt(mirror, XjActorDataKeys.XjZz, 0);
 		XjActorAccessor.SetInt(mirror, XjActorDataKeys.XjZzOverlayMask, 0);
@@ -967,6 +970,12 @@ internal static class XjXuanJianShenTongSpecials
 		XjActorAccessor.SetString(mirror, XjActorDataKeys.XjGongFaSource, string.Empty);
 		XjActorAccessor.SetInt(mirror, XjActorDataKeys.XjGongFaCollectionVersion, 0);
 		XjActorAccessor.SetString(mirror, XjActorDataKeys.XjGongFaCollectionJson, string.Empty);
+		XjActorAccessor.SetInt(mirror, XjActorDataKeys.XjGongFaLastExecutionYear, 0);
+		XjActorAccessor.SetInt(mirror, XjActorDataKeys.XjGongFaClockTargetGrade, 0);
+		XjActorAccessor.SetInt(mirror, XjActorDataKeys.XjGongFaClockEligibilityYear, 0);
+		XjActorAccessor.SetInt(mirror, XjActorDataKeys.XjGongFaGrade4NextAttemptYear, 0);
+		XjActorAccessor.SetInt(mirror, XjActorDataKeys.XjGongFaGrade5NextAttemptYear, 0);
+
 		XjActorAccessor.SetInt(mirror, XjActorDataKeys.XjGongFaGrade5PromotionFailureCount, 0);
 		XjActorAccessor.SetInt(mirror, XjActorDataKeys.XjGongFaGrade5PromotionLastYear, 0);
 		XjActorAccessor.SetString(mirror, XjActorDataKeys.XjGongFaGrade5PromotionLastFailureReason, string.Empty);
@@ -976,6 +985,10 @@ internal static class XjXuanJianShenTongSpecials
 		XjActorAccessor.SetInt(mirror, XjActorDataKeys.XjXianJiCount, 0);
 		XjActorAccessor.SetString(mirror, XjActorDataKeys.XjXianJiIds, string.Empty);
 		XjActorAccessor.SetInt(mirror, XjActorDataKeys.XjXianJiLastYear, 0);
+		XjActorAccessor.SetInt(mirror, XjActorDataKeys.XjXianJiLastExecutionYear, 0);
+		XjActorAccessor.SetInt(mirror, XjActorDataKeys.XjXianJiClockTargetCount, 0);
+		XjActorAccessor.SetInt(mirror, XjActorDataKeys.XjXianJiClockEligibilityYear, 0);
+		XjActorAccessor.SetInt(mirror, XjActorDataKeys.XjXianJiLastLogicalAttemptYear, 0);
 		XjActorAccessor.SetInt(mirror, XjActorDataKeys.XjXianJiFailureCount, 0);
 		XjActorAccessor.SetString(mirror, XjActorDataKeys.XjXianJiProjectId, string.Empty);
 		XjActorAccessor.SetInt(mirror, XjActorDataKeys.XjXianJiProjectTargetCount, 0);
@@ -989,6 +1002,9 @@ internal static class XjXuanJianShenTongSpecials
 		XjActorAccessor.SetString(mirror, XjActorDataKeys.XjQiuJinFaBoundAuthority, string.Empty);
 		XjActorAccessor.SetInt(mirror, XjActorDataKeys.XjQiuJinFaReady, 0);
 		XjActorAccessor.SetInt(mirror, XjActorDataKeys.XjQiuJinFaLastYear, 0);
+		XjActorAccessor.SetInt(mirror, XjActorDataKeys.XjQiuJinFaLastExecutionYear, 0);
+		XjActorAccessor.SetInt(mirror, XjActorDataKeys.XjQiuJinFaEligibilityYear, 0);
+		XjActorAccessor.SetInt(mirror, XjActorDataKeys.XjQiuJinFaLastLogicalAttemptYear, 0);
 		XjActorAccessor.SetInt(mirror, XjActorDataKeys.XjQiuJinFaFailureCount, 0);
 		XjActorAccessor.SetString(mirror, XjActorDataKeys.XjQiuJinFaLastFailureReason, string.Empty);
 		XjActorAccessor.SetString(mirror, XjActorDataKeys.XjJinDanJinXing, string.Empty);
@@ -1002,6 +1018,8 @@ internal static class XjXuanJianShenTongSpecials
 		XjActorAccessor.SetInt(mirror, XjActorDataKeys.XjJinDanSuccessEventYear, 0);
 		XjActorAccessor.SetInt(mirror, XjActorDataKeys.XjJinDanSuccessEventSchema, 0);
 		XjActorAccessor.SetInt(mirror, XjActorDataKeys.XjJinDanYiXiang, 0);
+		XjActorAccessor.SetInt(mirror, XjActorDataKeys.XjZiFuLingWuNextOpportunityYear, 0);
+		XjActorAccessor.SetInt(mirror, XjActorDataKeys.XjZiFuLingWuLastExecutionYear, 0);
 		XjActorAccessor.SetInt(mirror, XjActorDataKeys.XjJieLinXian, 0);
 		XjActorAccessor.SetInt(mirror, XjActorDataKeys.XjJieLinXianYear, 0);
 
@@ -1053,6 +1071,16 @@ internal static class XjXuanJianShenTongSpecials
 		XjActorAccessor.SetInt(mirror, XjActorDataKeys.XjAnnualLatestRequestedYear, 0);
 		XjActorAccessor.SetInt(mirror, XjActorDataKeys.XjAnnualStage, 0);
 		XjActorAccessor.SetInt(mirror, XjActorDataKeys.XjAnnualLastCompletedYear, 0);
+		XjActorAccessor.SetInt(mirror, XjActorDataKeys.XjAnnualSecondaryActiveYear, 0);
+		XjActorAccessor.SetInt(mirror, XjActorDataKeys.XjAnnualSecondaryLatestRequestedYear, 0);
+		XjActorAccessor.SetInt(mirror, XjActorDataKeys.XjAnnualSecondaryLastCompletedYear, 0);
+		XjActorAccessor.SetInt(mirror, XjActorDataKeys.XjAnnualMaintenanceFromYear, 0);
+		XjActorAccessor.SetInt(mirror, XjActorDataKeys.XjAnnualMaintenanceActiveYear, 0);
+		XjActorAccessor.SetInt(mirror, XjActorDataKeys.XjAnnualMaintenanceLatestRequestedYear, 0);
+		XjActorAccessor.SetInt(mirror, XjActorDataKeys.XjAnnualMaintenanceStage, 0);
+		XjActorAccessor.SetInt(mirror, XjActorDataKeys.XjAnnualMaintenanceLastCompletedYear, 0);
+		XjActorAccessor.SetInt(mirror, XjActorDataKeys.XjWeaponArtActivatedYear, 0);
+		XjActorAccessor.SetInt(mirror, XjActorDataKeys.XjCraftActivatedYear, 0);
 
 		if (mirror.hasTrait(JieLinZhangTraitId)) mirror.removeTrait(JieLinZhangTraitId);
 		if (mirror.hasTrait(YeTianMenTraitId)) mirror.removeTrait(YeTianMenTraitId);

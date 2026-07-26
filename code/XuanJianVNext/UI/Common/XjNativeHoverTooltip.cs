@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Reflection;
 using UnityEngine;
@@ -13,7 +13,6 @@ namespace XuanJianVNext.UI.Common;
 /// </summary>
 internal static class XjNativeHoverTooltip
 {
-	private const string RuntimeSlotPrefix = "xuanjian.runtime.tooltip.slot.";
 	private const int MaxRuntimeTextSlots = 2048;
 	private static readonly HashSet<string> RegisteredTexts = new HashSet<string>(StringComparer.Ordinal);
 	private static readonly Dictionary<string, int> RuntimeSlotBySignature = new Dictionary<string, int>(StringComparer.Ordinal);
@@ -40,32 +39,21 @@ internal static class XjNativeHoverTooltip
 			return;
 		}
 
-		string safeTitle = NormalizeDisplayText(title);
-		string safeDescription = NormalizeDisplayText(description);
-		string safeDetails = NormalizeDisplayText(details);
+		string safeTitle = title ?? string.Empty;
+		string safeDescription = description ?? string.Empty;
+		string safeDetails = details ?? string.Empty;
 		EnsureNativeButton(tip);
-		EnsurePassthrough(safeTitle, safeDescription, safeDetails);
-
-		// Native tooltip paths differ between WorldBox tabs. Store direct text as
-		// passthrough keys so unresolved runtime slot ids never leak to players.
-		tip.textOnClick = safeTitle;
-		tip.textOnClickDescription = safeDescription;
-		TrySetStringMember(tip, "text_description_2", safeDetails);
-		ApplyDirectTooltipFallbacks(tip, safeTitle, safeDescription, safeDetails);
-	}
-
-	private static void ApplyDirectTooltipFallbacks(TipButton tip, string title, string description, string details)
-	{
-		TrySetStringMember(tip, "textOnHover", title);
-		TrySetStringMember(tip, "text_on_hover", title);
-		TrySetStringMember(tip, "text_description", description);
-		TrySetStringMember(tip, "description", details);
-		TrySetStringMember(tip, "tip", title);
-		TrySetStringMember(tip, "tooltip", title);
-		TrySetStringMember(tip, "tooltipTitle", title);
-		TrySetStringMember(tip, "tooltip_title", title);
-		TrySetStringMember(tip, "tooltipDescription", description);
-		TrySetStringMember(tip, "tooltip_description", description);
+		string titleKey = RegisterRuntimeText("title", safeTitle);
+		string descriptionKey = RegisterRuntimeText("description", safeDescription);
+		string detailsKey = RegisterRuntimeText("details", safeDetails);
+		tip.textOnClick = titleKey;
+		tip.textOnClickDescription = descriptionKey;
+		TrySetStringMember(tip, "text_description_2", detailsKey);
+		TrySetStringMember(tip, "textOnHover", titleKey);
+		TrySetStringMember(tip, "text_on_hover", titleKey);
+		TrySetStringMember(tip, "text_description", descriptionKey);
+		TrySetStringMember(tip, "description", detailsKey);
+		TrySetStringMember(tip, "tip", titleKey);
 	}
 
 	internal static void RegisterPassthrough(params string[] texts)
@@ -106,24 +94,9 @@ internal static class XjNativeHoverTooltip
 
 	private static string BuildRuntimeSlotKey(int slot)
 	{
-		return RuntimeSlotPrefix + slot.ToString("D4");
+		return "xuanjian.runtime.tooltip.slot." + slot.ToString("D4");
 	}
 
-	internal static string NormalizeDisplayText(string text)
-	{
-		if (string.IsNullOrWhiteSpace(text)) return string.Empty;
-		string value = text.Trim();
-		if (!value.StartsWith(RuntimeSlotPrefix, StringComparison.Ordinal)) return value;
-		string suffix = value.Substring(RuntimeSlotPrefix.Length);
-		if (int.TryParse(suffix, out int slot)
-			&& slot >= 0
-			&& slot < RuntimeSlotValues.Length
-			&& !string.IsNullOrWhiteSpace(RuntimeSlotValues[slot]))
-		{
-			return RuntimeSlotValues[slot];
-		}
-		return string.Empty;
-	}
 	private static void FlushRuntimeTexts(LocalizedTextManager manager)
 	{
 		if (manager == null) return;
@@ -146,7 +119,7 @@ internal static class XjNativeHoverTooltip
 		}
 		catch
 		{
-			// 固定槽允许覆盖旧动态文本；其他路径先注册时不再创建新 key。
+			// 固定槽允许覆盖旧动态文本；即使其他路径先注册，也不再创建新 key。
 		}
 	}
 
@@ -246,4 +219,3 @@ internal static class XjNativeHoverTooltip
 		}
 	}
 }
-

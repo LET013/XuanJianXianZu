@@ -252,7 +252,8 @@ internal static class XjWeaponArtSystem
 	internal static void TickActor(Actor actor, int currentYear)
 	{
 		if (actor?.data == null || currentYear <= 0
-			|| XjRealmSuppression.GetRealmTier(actor) <= XjRealmSuppression.TierNone) return;
+			|| XjRealmSuppression.GetRealmTier(actor) <= XjRealmSuppression.TierNone
+			|| !IsActiveInYear(actor, currentYear)) return;
 		long actorId = ((BaseSystemData)actor.data).id;
 		if (actorId <= 0L) return;
 		RepairLegacyState(actor);
@@ -288,6 +289,31 @@ internal static class XjWeaponArtSystem
 		int proficiency = Math.Min(MaximumProficiency, state.Proficiency + gain);
 		XjActorAccessor.SetInt(actor, XjActorDataKeys.XjWeaponArtProficiency, proficiency);
 		TryAdvanceRank(actor, currentYear, combat, proficiency);
+	}
+
+	internal static bool IsActiveInYear(Actor actor, int annualYear)
+	{
+		if (actor?.data == null || annualYear <= 0 || !HasAnnualInterest(actor)) return false;
+		if (!XjActorAccessor.TryGetInt(actor, XjActorDataKeys.XjWeaponArtActivatedYear, out int activatedYear)
+			|| activatedYear <= 0)
+		{
+			activatedYear = annualYear;
+			XjActorAccessor.SetInt(actor, XjActorDataKeys.XjWeaponArtActivatedYear, activatedYear);
+		}
+		return annualYear >= activatedYear;
+	}
+
+	internal static bool HasAnnualInterest(Actor actor)
+	{
+		if (actor?.data == null
+			|| XjRealmSuppression.GetRealmTier(actor) <= XjRealmSuppression.TierNone)
+		{
+			return false;
+		}
+		if (HasBoundKind(actor, out _)) return true;
+		Item weapon = actor.equipment?.getSlot(EquipmentType.Weapon)?.getItem();
+		return weapon?.data != null
+			&& XjWeaponArtKinds.IsEquipmentCandidate(ResolveItemKindForActor(actor, weapon));
 	}
 
 	internal static bool TryGetBonusProfile(Actor actor, out XjFaBaoBonusProfile profile)
@@ -505,6 +531,8 @@ internal static class XjWeaponArtSystem
 		XjActorAccessor.SetInt(actor, XjActorDataKeys.XjWeaponArtRank, XjWeaponArtRanks.None);
 		XjActorAccessor.SetInt(actor, XjActorDataKeys.XjWeaponArtProficiency, 0);
 		XjActorAccessor.SetInt(actor, XjActorDataKeys.XjWeaponArtFailureCount, 0);
+		int activationYear = Math.Max(1, year);
+		XjActorAccessor.SetInt(actor, XjActorDataKeys.XjWeaponArtActivatedYear, activationYear);
 		XjActorAccessor.SetInt(actor, XjActorDataKeys.XjWeaponArtLastInsightYear, Math.Max(0, year));
 		XjActorAccessor.SetString(actor, XjActorDataKeys.XjWeaponArtIntentSource, source ?? string.Empty);
 		UpdateIntentLock(actor);

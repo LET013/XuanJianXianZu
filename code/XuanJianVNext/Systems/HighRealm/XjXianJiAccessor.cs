@@ -112,6 +112,7 @@ internal static class XjXianJiAccessor
 		XjActorAccessor.SetString(actor, XjActorDataKeys.XjXianJiIds, joined);
 		XjActorAccessor.SetString(actor, XjActorDataKeys.XjShenTongIds, joined);
 		XjActorAccessor.SetInt(actor, XjActorDataKeys.XjXianJiLastYear, Math.Max(0, currentYear));
+		XjXianJiOpportunitySchedule.OnCollectionChanged(actor, nextIds.Length, currentYear);
 		Forget(actor);
 		XjActorGongFaCollection.ReconcileWithActor(actor, "XianJiAdd");
 		XjLongShuSystem.RefreshTitleAfterXianJiChange(actor);
@@ -150,6 +151,13 @@ internal static class XjXianJiAccessor
 		XjActorAccessor.SetInt(actor, XjActorDataKeys.XjXianJiCount, rawIds.Length);
 		XjActorAccessor.SetString(actor, XjActorDataKeys.XjXianJiIds, joined);
 		XjActorAccessor.SetString(actor, XjActorDataKeys.XjShenTongIds, joined);
+		if (storedCount != rawIds.Length)
+		{
+			XjXianJiOpportunitySchedule.OnCollectionChanged(
+				actor,
+				rawIds.Length,
+				XuanJianVNext.Systems.Runtime.XjAnnualExecutionContext.ResolveYear(actor));
+		}
 		Forget(actor);
 		XjActorGongFaCollection.ReconcileWithActor(actor, "RealmLimit");
 		return true;
@@ -178,6 +186,12 @@ internal static class XjXianJiAccessor
 		XjActorAccessor.SetString(actor, XjActorDataKeys.XjXianJiIds, joined);
 		XjActorAccessor.SetString(actor, XjActorDataKeys.XjShenTongIds, joined);
 		XjActorAccessor.SetInt(actor, XjActorDataKeys.XjXianJiLastYear, Math.Max(0, lastYear));
+		XjXianJiOpportunitySchedule.OnCollectionChanged(
+			actor,
+			normalized.Count,
+			lastYear > 0
+				? lastYear
+				: XuanJianVNext.Systems.Runtime.XjAnnualExecutionContext.ResolveYear(actor));
 		Forget(actor);
 		return true;
 	}

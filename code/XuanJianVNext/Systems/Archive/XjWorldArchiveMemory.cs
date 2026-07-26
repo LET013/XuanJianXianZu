@@ -87,6 +87,7 @@ internal static class XjWorldArchiveMemory
 		XjYinSiExposurePursuitSystem.ExportArchiveRecords(data.YinSiMissionRecords);
 		XjSectLectureSystem.ExportArchiveRecords(data.SectLectureRecords);
 		XjCraftDomainRegistry.ExportArchiveRecords(data.Craft);
+		data.LongRunEcology = XjStageFiveEcologyGuard.ExportState();
 		return data;
 	}
 
@@ -95,6 +96,7 @@ internal static class XjWorldArchiveMemory
 		XjWorldArchiveData archive = data ?? new XjWorldArchiveData();
 		archive.Alchemy ??= new XjAlchemyArchiveBundle();
 		archive.Craft ??= new XjCraftArchiveBundle();
+		archive.LongRunEcology ??= new XjLongRunEcologyArchiveData();
 		XjFamilyChronicleMemory.Shared.ImportArchiveRecords(archive.FamilyChronicles);
 		XjFamilyIdentityIndex.ImportArchiveRecords(archive.FamilyIdentityIndex);
 		XjFamilyMemberIndex.Shared.ImportPendingRecords(archive.FamilyPendingRecords);
@@ -155,5 +157,6 @@ internal static class XjWorldArchiveMemory
 			archive.Alchemy.Tasks,
 			archive.Alchemy.Crafters,
 			archive.Alchemy.RecipeProficiencies);
+		XjStageFiveEcologyGuard.ImportState(archive.LongRunEcology);
 	}
 }

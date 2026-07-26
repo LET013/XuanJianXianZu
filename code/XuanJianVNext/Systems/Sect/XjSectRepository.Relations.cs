@@ -47,20 +47,6 @@ internal static partial class XjSectRepository
 		return sectId > 0L;
 	}
 
-	internal static bool TryResolveFamilySect(long familyId, out XjSectArchiveRecord record)
-	{
-		record = null;
-		if (!TryResolveFamilySectId(familyId, out long sectId)
-			|| !BySectId.TryGetValue(sectId, out record)
-			|| !IsEstablishedSect(record)
-			|| !HasValidSectCity(sectId))
-		{
-			record = null;
-			return false;
-		}
-
-		return true;
-	}
 	internal static bool HasValidSectCity(long sectId)
 	{
 		return CountValidSectCities(sectId) > 0;

@@ -1,5 +1,6 @@
-using System;
+﻿using System;
 using XuanJianVNext.Systems.ActorSystem;
+using XuanJianVNext.Core;
 using XuanJianVNext.Systems.Cultivation;
 using XuanJianVNext.Data.Rules;
 using XuanJianVNext.Systems.Family;
@@ -66,7 +67,9 @@ internal static class XjAptitudeLocalExecutor
 		if (!XjAptitudeRuleEvaluator.IsAgeFiveEligibilityWindow(ageYear))
 		{
 			XjActorAccessor.SetInt(actor, XjActorDataKeys.XjZzCheckedAge5, 1);
-			return new XjAptitudeExecuteResult(true, true, false, 0, "AgeFiveWindowMissed");
+			XjAptitudeExecuteResult missed = new XjAptitudeExecuteResult(true, true, false, 0, "AgeFiveWindowMissed");
+			XjStageZeroObservation.RecordAptitudeResult(actor, missed);
+			return missed;
 		}
 
 		XjAptitudeRollResult result = XjAptitudeRuleEvaluator.EvaluateAtAgeFive(actor);
@@ -88,7 +91,9 @@ internal static class XjAptitudeLocalExecutor
 		XjAptitudeEffectRules.ApplyOnAgeFiveResult(actor, result);
 		XjVisibleTraitSync.SyncCultivationTraits(actor);
 
-		return new XjAptitudeExecuteResult(true, true, result.Passed, result.XjZz, result.ReasonCode);
+		XjAptitudeExecuteResult executed = new XjAptitudeExecuteResult(true, true, result.Passed, result.XjZz, result.ReasonCode);
+		XjStageZeroObservation.RecordAptitudeResult(actor, executed);
+		return executed;
 	}
 }
 

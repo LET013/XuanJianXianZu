@@ -12,6 +12,8 @@ using XuanJianVNext.Systems.ZongMen;
 using XuanJianVNext.Systems.Chronicle;
 using XuanJianVNext.Systems.History.Books;
 
+using XuanJianVNext.Systems.Runtime;
+
 namespace XuanJianVNext.Systems.HighRealm;
 
 internal static class XjZiFuProgression
@@ -65,10 +67,17 @@ internal static class XjZiFuProgression
 			TryGrantFirstShenTong(actor, snapshot, state, currentYear);
 			return;
 		}
-		if (!HasReachedShenTongChronology(actor, state.Count + 1, currentYear))
+		int targetCount = state.Count + 1;
+		if (!TryResolveShenTongEligibilityYear(actor, targetCount, currentYear, out int minimumEligibilityYear))
 		{
 			return;
 		}
+		int stageActivationYear = XjXianJiOpportunitySchedule.EnsureStage(
+			actor,
+			targetCount,
+			minimumEligibilityYear,
+			currentYear,
+			out int lastLogicalAttemptYear);
 
 		XjGongFaState gongFa = XjGongFaAccessor.BuildState(actor);
 		if (!gongFa.Found || snapshot.ZhenYuan < GetRequiredZhenYuan(state.Count))
@@ -78,7 +87,14 @@ internal static class XjZiFuProgression
 
 		int attemptIntervalYears = XjAlchemyPillEffectSystem.ResolveShenTongAttemptIntervalYears(
 			actor, currentYear, AttemptIntervalYears);
-		if (currentYear < state.LastYear + attemptIntervalYears)
+		long intervalDue = (long)Math.Max(1, stageActivationYear) + Math.Max(1, attemptIntervalYears);
+		int eligibilityYear = Math.Max(
+			minimumEligibilityYear,
+			intervalDue > int.MaxValue ? int.MaxValue : (int)intervalDue);
+		if (!XjProgressionOpportunityClock.TryResolveIntervalDueYear(
+				lastLogicalAttemptYear, attemptIntervalYears, eligibilityYear, currentYear, out int opportunityYear)
+			|| !XjProgressionOpportunityClock.HasExecutionSlot(
+				actor, XjActorDataKeys.XjXianJiLastExecutionYear, currentYear))
 		{
 			return;
 		}
@@ -87,8 +103,9 @@ internal static class XjZiFuProgression
 		// 无论成功与否都属于真实判定并消耗本次三年/五年周期。
 		if (gongFa.Grade < 5)
 		{
-			XjGongFaProgression.TryPromoteMainToGrade5ForShenTong(actor, snapshot, currentYear);
-			MarkRealAttempt(actor, currentYear);
+			MarkOpportunityExecution(actor, currentYear, opportunityYear);
+			XjGongFaProgression.TryPromoteMainToGrade5ForShenTong(actor, snapshot, opportunityYear);
+			MarkLogicalAttempt(actor, opportunityYear);
 			return;
 		}
 
@@ -96,17 +113,23 @@ internal static class XjZiFuProgression
 		// 计划状态，不消耗本次判定周期；真正获得神通时 Add 会写入本年。
 		if (XjRenDan.TryAdvancePreparedPlan(actor, snapshot, state, currentYear))
 		{
+			XjXianJiState postPlanState = XjXianJiAccessor.BuildState(actor);
+			if (postPlanState.Count > state.Count)
+			{
+				MarkOpportunityExecution(actor, currentYear, opportunityYear);
+			}
 			return;
 		}
 
 		if (actor.hasTrait("ChuShen8"))
 		{
+			MarkOpportunityExecution(actor, currentYear, opportunityYear);
 			TryGrantDaoZhuShenTong(actor, snapshot, state, currentYear);
 			return;
 		}
 		if (XjRenDan.TryAcquireDuringXianJi(actor, snapshot, state, currentYear))
 		{
-			MarkRealAttempt(actor, currentYear);
+			MarkOpportunityExecution(actor, currentYear, opportunityYear);
 			return;
 		}
 
@@ -115,22 +138,40 @@ internal static class XjZiFuProgression
 		if (TryGrantFamilyMapped(actor, snapshot, state, currentYear)
 			|| TryGrantZongMenMapped(actor, snapshot, state, currentYear))
 		{
+			MarkOpportunityExecution(actor, currentYear, opportunityYear);
 			return;
 		}
 
-		TryComprehendNewShenTong(actor, snapshot, state, currentYear);
+		MarkOpportunityExecution(actor, currentYear, opportunityYear);
+		TryComprehendNewShenTong(actor, snapshot, state, currentYear, opportunityYear);
 	}
 
-	private static bool HasReachedShenTongChronology(Actor actor, int ordinal, int currentYear)
+	private static bool TryResolveShenTongEligibilityYear(Actor actor, int ordinal, int currentYear, out int eligibilityYear)
 	{
-		if (ordinal <= 1) return true;
+		eligibilityYear = 0;
+		if (ordinal <= 1)
+		{
+			eligibilityYear = Math.Max(1, currentYear);
+			return currentYear > 0;
+		}
+
 		int requiredZiFuYears = ordinal switch { 2 => 20, 3 => 50, 4 => 90, 5 => 140, _ => int.MaxValue };
 		int minimumAge = ordinal switch { 2 => 120, 3 => 150, 4 => 190, 5 => 240, _ => int.MaxValue };
+		if (requiredZiFuYears == int.MaxValue || minimumAge == int.MaxValue || currentYear <= 0) return false;
+
 		int age;
 		try { age = actor == null ? 0 : (int)Math.Floor(Math.Max(0f, actor.getAge())); } catch { age = 0; }
-		if (age < minimumAge) return false;
 		int ziFuYear = XjCultivationStateTransitions.ReadZiFuEnteredYear(actor);
-		return ziFuYear > 0 && currentYear >= ziFuYear + requiredZiFuYears;
+		if (ziFuYear <= 0) return false;
+
+		long birthYear = Math.Max(0L, (long)currentYear - age);
+		long ageEligibleYear = birthYear + minimumAge;
+		long tenureEligibleYear = (long)ziFuYear + requiredZiFuYears;
+		long resolved = Math.Max(ageEligibleYear, tenureEligibleYear);
+		if (resolved > int.MaxValue) return false;
+
+		eligibilityYear = Math.Max(1, (int)resolved);
+		return currentYear >= eligibilityYear;
 	}
 
 	private static bool TryGrantFirstShenTong(
@@ -201,11 +242,12 @@ internal static class XjZiFuProgression
 		Actor actor,
 		in XjActorCultivationSnapshot snapshot,
 		in XjXianJiState state,
-		int currentYear)
+		int currentYear,
+		int opportunityYear)
 	{
 		int ordinal = state.Count + 1;
 		if (!XjXianJiCatalog.TryPickForProgression(
-				snapshot.DaoTu, ordinal, GetActorId(actor) + currentYear, state.Ids,
+				snapshot.DaoTu, ordinal, GetActorId(actor) + opportunityYear, state.Ids,
 				IsZhengWeiManifested(snapshot.DaoTu), !XjLongShuSystem.IsLongShu(actor), out string id))
 		{
 			return false;
@@ -226,9 +268,9 @@ internal static class XjZiFuProgression
 			+ TryConsumeLectureShenTongAid(actor, currentYear));
 		chance = Math.Min(maximumChance, Math.Max(0f, chance + aidBonus));
 
-		MarkRealAttempt(actor, currentYear);
+		MarkLogicalAttempt(actor, opportunityYear);
 		ConsumeAttemptCost(actor, state.Count);
-		long seed = GetActorId(actor) + currentYear + state.Count * 29L;
+		long seed = GetActorId(actor) + opportunityYear + state.Count * 29L;
 		if (XjDeterministicHash.PositiveIndex(seed, "xianji_comprehension", 10000)
 			>= (int)Math.Floor(chance * 10000f))
 		{
@@ -302,12 +344,16 @@ internal static class XjZiFuProgression
 		return Math.Clamp(bonus, 0f, 0.18f);
 	}
 
-	private static void MarkRealAttempt(Actor actor, int currentYear)
+	private static void MarkOpportunityExecution(Actor actor, int executionYear, int opportunityYear)
 	{
-		if (actor?.data != null)
-		{
-			XjActorAccessor.SetInt(actor, XjActorDataKeys.XjXianJiLastYear, Math.Max(0, currentYear));
-		}
+		XjProgressionOpportunityClock.MarkExecuted(
+			actor, XjActorDataKeys.XjXianJiLastExecutionYear, executionYear);
+		XjStageZeroObservation.RecordOpportunityDebtConsumed("XianJi", opportunityYear, executionYear);
+	}
+
+	private static void MarkLogicalAttempt(Actor actor, int opportunityYear)
+	{
+		XjXianJiOpportunitySchedule.MarkLogicalAttempt(actor, opportunityYear);
 	}
 
 	private static void ConsumeAttemptCost(Actor actor, int currentCount)
@@ -382,4 +428,5 @@ internal static class XjZiFuProgression
 	{
 		return actor?.data == null ? 0L : ((BaseSystemData)actor.data).id;
 	}
-}
+}
+

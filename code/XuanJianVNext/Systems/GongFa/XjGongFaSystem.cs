@@ -13,6 +13,7 @@ using XuanJianVNext.Systems.Warehouse;
 using XuanJianVNext.Systems.LongShu;
 using XuanJianVNext.Systems.HighRealm;
 using XuanJianVNext.Systems.QianKunDai;
+using XuanJianVNext.Systems.Runtime;
 
 namespace XuanJianVNext.Systems.GongFa;
 
@@ -411,6 +412,7 @@ internal static class XjGongFaAccessor
 			return;
 		}
 
+		XjActorAccessor.TryGetInt(actor, XjActorDataKeys.XjGongFaGrade, out int previousGrade);
 		XjActorAccessor.SetString(actor, XjActorDataKeys.XjGongFaName, state.Name);
 		XjActorAccessor.SetInt(actor, XjActorDataKeys.XjGongFaGrade, state.Grade);
 		// 清零旧阶段/进度键，避免旧存档残值继续被其他兼容代码误读。
@@ -418,6 +420,13 @@ internal static class XjGongFaAccessor
 		XjActorAccessor.SetFloat(actor, XjActorDataKeys.XjGongFaProgress, 0f);
 		XjActorAccessor.SetString(actor, XjActorDataKeys.XjGongFaDaoTu, state.DaoTu);
 		XjActorGongFaCollection.UpsertPrimary(actor, state);
+		if (previousGrade != state.Grade)
+		{
+			XjGongFaAttemptSchedule.OnGradeChanged(
+				actor,
+				state.Grade,
+				XjAnnualExecutionContext.ResolveYear(actor));
+		}
 	}
 
 	internal static void WriteSource(Actor actor, string source)
@@ -443,6 +452,7 @@ internal static class XjGongFaAccessor
 		XjActorAccessor.SetString(actor, XjActorDataKeys.XjGongFaDaoTu, string.Empty);
 		XjActorAccessor.SetString(actor, XjActorDataKeys.XjGongFaSource, string.Empty);
 		XjActorAccessor.SetInt(actor, XjActorDataKeys.XjGongFaLastProgressionYear, 0);
+		XjGongFaAttemptSchedule.Clear(actor);
 		XjActorAccessor.SetInt(actor, XjActorDataKeys.XjGongFaGrade5PromotionFailureCount, 0);
 		XjActorAccessor.SetInt(actor, XjActorDataKeys.XjGongFaGrade5PromotionLastYear, 0);
 		XjActorAccessor.SetString(actor, XjActorDataKeys.XjGongFaGrade5PromotionLastFailureReason, string.Empty);
@@ -475,8 +485,12 @@ internal static class XjGongFaAptitudeRules
 	/// </summary>
 	internal static int GetRealmGradeCap(Actor actor)
 	{
-		int tier = XjRealmSuppression.GetRealmTier(actor);
-		return tier switch
+		return GetRealmGradeCap(XjRealmSuppression.GetRealmTier(actor));
+	}
+
+	internal static int GetRealmGradeCap(int realmTier)
+	{
+		return realmTier switch
 		{
 			XjRealmSuppression.TierJinDan => 6,
 			XjRealmSuppression.TierZiFu => 6,
@@ -592,22 +606,18 @@ internal static class XjGongFaProgression
 		}
 
 		int currentYear = GetCurrentYear(actor);
-		if (!XjGongFaAttemptSchedule.IsDue(actor, nextGrade, currentYear))
+		if (!XjGongFaAttemptSchedule.TryBeginAttempt(actor, nextGrade, currentYear, out int attemptYear))
 		{
 			return;
 		}
 
-		// 一、二、三品必须真实经历年度升品，不能因同一年内多条维护入口
-		// 重复调用而连续跳到四品。所有自行参悟尝试同年只执行一次；
-		// 家族借法与紫府功法蜕变仍走各自明确的传承/境界入口。
-		if (XjActorAccessor.TryGetInt(actor, XjActorDataKeys.XjGongFaLastProgressionYear, out int lastProgressionYear)
-			&& lastProgressionYear >= currentYear)
-		{
-			return;
-		}
-		XjActorAccessor.SetInt(actor, XjActorDataKeys.XjGongFaLastProgressionYear, Math.Max(0, currentYear));
+		// executionYear 只负责同一世界年去重；attemptYear 是持久化逻辑游标。
+		// 高倍速折叠后每年最多消费一笔旧机会，剩余周期继续保留。
+		XjActorAccessor.SetInt(actor, XjActorDataKeys.XjGongFaLastProgressionYear, Math.Max(0, attemptYear));
 
-		if (!ShouldComprehendByHuiGuang(actor, snapshot.HuiGuang, state.Grade, nextGrade, currentYear))
+		bool comprehended = ShouldComprehendByHuiGuang(actor, snapshot.HuiGuang, state.Grade, nextGrade, attemptYear);
+		XjStageZeroObservation.RecordGongFaAttempt(nextGrade, comprehended);
+		if (!comprehended)
 		{
 			RecordGrade5Failure(actor, nextGrade, currentYear);
 			return;
@@ -637,7 +647,9 @@ internal static class XjGongFaProgression
 			return false;
 		}
 
-		if (!ShouldComprehendByHuiGuang(actor, snapshot.HuiGuang, current.Grade, 5, currentYear))
+		bool comprehended = ShouldComprehendByHuiGuang(actor, snapshot.HuiGuang, current.Grade, 5, currentYear);
+		XjStageZeroObservation.RecordGongFaAttempt(5, comprehended);
+		if (!comprehended)
 		{
 			RecordGrade5Failure(actor, 5, currentYear);
 			return false;

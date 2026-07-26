@@ -26,9 +26,9 @@ namespace XuanJianVNext.Systems.HighRealm;
 
 internal static partial class XjJinDanBreakthroughSystem
 {
-	internal static void TickAnnualGift(Actor actor)
+	internal static void TickAnnualGift(Actor actor, int annualYear)
 	{
-		if (actor?.data == null || XjLongShuSystem.IsLongShu(actor))
+		if (actor?.data == null || annualYear <= 0 || XjLongShuSystem.IsLongShu(actor))
 		{
 			return;
 		}
@@ -41,7 +41,10 @@ internal static partial class XjJinDanBreakthroughSystem
 			return;
 		}
 
-		int currentAge = (int)Math.Floor(Math.Max(0f, actor.getAge()));
+		int liveYear = XjYearTracker.CurrentYear;
+		if (liveYear <= 0) liveYear = World.world?.map_stats?.year ?? annualYear;
+		int liveAge = (int)Math.Floor(Math.Max(0f, actor.getAge()));
+		int currentAge = Math.Max(0, liveAge - Math.Max(0, liveYear - annualYear));
 		if (currentAge <= 0 || currentAge % 10 != 0)
 		{
 			return;

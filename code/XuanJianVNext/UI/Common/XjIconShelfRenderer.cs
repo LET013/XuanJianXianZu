@@ -1,7 +1,6 @@
 using System.Globalization;
 using UnityEngine;
 using UnityEngine.UI;
-using UnityEngine.EventSystems;
 
 namespace XuanJianVNext.UI.Common;
 
@@ -36,7 +35,7 @@ internal readonly struct XjIconShelfMetrics
 
 internal static class XjIconShelfRenderer
 {
-	// Native UnitGenealogyElement stable content width.
+	// 原生 UnitGenealogyElement 的稳定内容宽度。0.5.4 家族传承同样以 218 为基准。
 	internal const float DefaultFrameWidth = 218f;
 	internal const float DefaultContentWidth = 206f;
 	internal const float DefaultIconCellSize = 34f;
@@ -170,8 +169,6 @@ internal static class XjIconShelfRenderer
 		background.color = new Color(1f, 1f, 1f, 0f);
 		background.raycastTarget = true;
 
-		AttachInputBlocker(slot);
-
 		if (sprite != null)
 		{
 			GameObject icon = new GameObject("Icon", typeof(RectTransform), typeof(Image));
@@ -204,42 +201,6 @@ internal static class XjIconShelfRenderer
 			tooltipDescription ?? string.Empty,
 			tooltipDetails ?? string.Empty);
 		return slot;
-	}
-
-
-	private static void AttachInputBlocker(GameObject slot)
-	{
-		if (slot == null)
-		{
-			return;
-		}
-
-		EventTrigger trigger = slot.GetComponent<EventTrigger>() ?? slot.AddComponent<EventTrigger>();
-		if (trigger.triggers == null)
-		{
-			trigger.triggers = new System.Collections.Generic.List<EventTrigger.Entry>();
-		}
-		AddEventBlocker(trigger, EventTriggerType.PointerDown);
-		AddEventBlocker(trigger, EventTriggerType.PointerUp);
-		AddEventBlocker(trigger, EventTriggerType.BeginDrag);
-		AddEventBlocker(trigger, EventTriggerType.Drag);
-		AddEventBlocker(trigger, EventTriggerType.EndDrag);
-		AddEventBlocker(trigger, EventTriggerType.Scroll);
-	}
-
-	private static void AddEventBlocker(EventTrigger trigger, EventTriggerType type)
-	{
-		for (int i = 0; i < trigger.triggers.Count; i++)
-		{
-			if (trigger.triggers[i] != null && trigger.triggers[i].eventID == type)
-			{
-				return;
-			}
-		}
-
-		EventTrigger.Entry entry = new EventTrigger.Entry { eventID = type };
-		entry.callback.AddListener(data => data?.Use());
-		trigger.triggers.Add(entry);
 	}
 
 	private static void CreateFallbackText(Transform parent, string text, Font font)
@@ -289,4 +250,3 @@ internal static class XjIconShelfRenderer
 		label.text = count.ToString(CultureInfo.InvariantCulture);
 	}
 }
-

@@ -45,7 +45,10 @@ internal enum XjRuntimeHotspot : byte
 	AnnualTalisman = 33,
 	AnnualFinalizeResolve = 34,
 	AnnualThreeBookSocial = 35,
-	BackgroundThreeBookWorld = 36
+	BackgroundThreeBookWorld = 36,
+	AnnualMaintenanceIdentity = 37,
+	AnnualMaintenanceAncillary = 38,
+	AnnualMaintenanceAssets = 39
 }
 
 /// <summary>
@@ -181,7 +184,10 @@ internal static class XjRuntimeDiagnostics
 			|| hotspot == XjRuntimeHotspot.AnnualCraft
 			|| hotspot == XjRuntimeHotspot.AnnualTalisman
 			|| hotspot == XjRuntimeHotspot.AnnualFinalizeResolve
-			|| hotspot == XjRuntimeHotspot.AnnualThreeBookSocial;
+			|| hotspot == XjRuntimeHotspot.AnnualThreeBookSocial
+			|| hotspot == XjRuntimeHotspot.AnnualMaintenanceIdentity
+			|| hotspot == XjRuntimeHotspot.AnnualMaintenanceAncillary
+			|| hotspot == XjRuntimeHotspot.AnnualMaintenanceAssets;
 	}
 
 	private static void Flush()
@@ -335,6 +341,10 @@ internal static class XjRuntimeDiagnostics
 			XjRuntimeHotspot.AnnualCraft => "annual.craft",
 			XjRuntimeHotspot.AnnualTalisman => "annual.talisman",
 			XjRuntimeHotspot.AnnualFinalizeResolve => "annual.finalizeResolve",
+			XjRuntimeHotspot.AnnualThreeBookSocial => "annual.threeBookSocial",
+			XjRuntimeHotspot.AnnualMaintenanceIdentity => "annual.maintenance.identity",
+			XjRuntimeHotspot.AnnualMaintenanceAncillary => "annual.maintenance.ancillary",
+			XjRuntimeHotspot.AnnualMaintenanceAssets => "annual.maintenance.assets",
 			_ => hotspot.ToString()
 		};
 	}

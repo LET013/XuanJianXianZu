@@ -1,3 +1,4 @@
+﻿using XuanJianVNext.Core;
 using XuanJianVNext.Data.Rules;
 using XuanJianVNext.Systems.FaBao;
 using XuanJianVNext.Systems.HighRealm;
@@ -69,38 +70,17 @@ internal static class XjActorCultivationSnapshotBuilder
 {
 	internal static XjActorCultivationSnapshot BuildAnnualProgression(Actor actor, int realmTier)
 	{
-		if (realmTier >= XjRealmSuppression.TierZhuJi)
-		{
-			return Build(actor);
-		}
-
-		if (actor == null)
-		{
-			return XjActorCultivationSnapshot.Empty;
-		}
-
-		XjActorAccessor.TryGetString(actor, XjActorDataKeys.RealmId, out string realmId);
-		XjActorAccessor.TryGetString(actor, XjActorDataKeys.DaoTu, out string daoTu);
-		XjActorAccessor.TryGetFloat(actor, XjActorDataKeys.ZhenYuan, out float zhenYuan);
-		XjActorAccessor.TryGetFloat(actor, XjActorDataKeys.MingShu, out float mingShu);
-		XjActorAccessor.TryGetFloat(actor, XjActorDataKeys.HuiGuang, out float huiGuang);
-		XjActorAccessor.TryGetInt(actor, XjActorDataKeys.XjZz, out int xjZz);
-		XjActorAccessor.TryGetInt(actor, XjActorDataKeys.XjZzOverlayMask, out int xjZzOverlayMask);
-		XjFaBaoBonusService.ApplyEffectiveCultivationStats(actor, ref mingShu, ref huiGuang);
-
-		return new XjActorCultivationSnapshot(
-			realmId,
-			daoTu,
-			zhenYuan,
-			mingShu,
-			huiGuang,
-			xjZz,
-			xjZzOverlayMask,
-			0,
-			false);
+		bool full = realmTier >= XjRealmSuppression.TierZiFu;
+		XjStageZeroObservation.RecordAnnualSnapshotBuild(full);
+		return BuildInternal(actor, full);
 	}
 
 	internal static XjActorCultivationSnapshot Build(Actor actor)
+	{
+		return BuildInternal(actor, includeHighRealmState: true);
+	}
+
+	private static XjActorCultivationSnapshot BuildInternal(Actor actor, bool includeHighRealmState)
 	{
 		if (actor == null)
 		{
@@ -114,9 +94,15 @@ internal static class XjActorCultivationSnapshotBuilder
 		XjActorAccessor.TryGetFloat(actor, XjActorDataKeys.HuiGuang, out float huiGuang);
 		XjActorAccessor.TryGetInt(actor, XjActorDataKeys.XjZz, out int xjZz);
 		XjActorAccessor.TryGetInt(actor, XjActorDataKeys.XjZzOverlayMask, out int xjZzOverlayMask);
-		int xianJiCount = XjXianJiAccessor.BuildState(actor).Count;
-		XjActorAccessor.TryGetInt(actor, XjActorDataKeys.XjQiuJinFaReady, out int qiuJinFaReady);
-		XjActorAccessor.TryGetString(actor, XjActorDataKeys.XjQiuJinFaName, out string qiuJinFaName);
+		int xianJiCount = 0;
+		bool hasQiuJinFa = false;
+		if (includeHighRealmState)
+		{
+			xianJiCount = XjXianJiAccessor.BuildState(actor).Count;
+			XjActorAccessor.TryGetInt(actor, XjActorDataKeys.XjQiuJinFaReady, out int qiuJinFaReady);
+			XjActorAccessor.TryGetString(actor, XjActorDataKeys.XjQiuJinFaName, out string qiuJinFaName);
+			hasQiuJinFa = qiuJinFaReady == 1 && !string.IsNullOrWhiteSpace(qiuJinFaName);
+		}
 		XjFaBaoBonusService.ApplyEffectiveCultivationStats(actor, ref mingShu, ref huiGuang);
 
 		return new XjActorCultivationSnapshot(
@@ -128,6 +114,6 @@ internal static class XjActorCultivationSnapshotBuilder
 			xjZz,
 			xjZzOverlayMask,
 			xianJiCount,
-			qiuJinFaReady == 1 && !string.IsNullOrWhiteSpace(qiuJinFaName));
+			hasQiuJinFa);
 	}
 }

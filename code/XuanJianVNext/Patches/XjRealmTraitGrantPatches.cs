@@ -36,6 +36,7 @@ internal static class XjRealmTraitGrantPatches
 		if (__result || (__instance?.data != null && !string.IsNullOrWhiteSpace(traitId) && __instance.hasTrait(traitId)))
 		{
 			XjRuntimeActorInterestIndex.InvalidateCombatClassification(__instance);
+			XjCultivatorCandidateIndex.MarkProgressionDirty(__instance);
 		}
 	}
 
@@ -62,6 +63,7 @@ internal static class XjRealmTraitGrantPatches
 		if (__result || (__instance?.data != null && !string.IsNullOrWhiteSpace(trait?.id) && __instance.hasTrait(trait.id)))
 		{
 			XjRuntimeActorInterestIndex.InvalidateCombatClassification(__instance);
+			XjCultivatorCandidateIndex.MarkProgressionDirty(__instance);
 		}
 	}
 
@@ -91,6 +93,7 @@ internal static class XjRealmTraitGrantPatches
 		if (removed)
 		{
 			XjRuntimeActorInterestIndex.InvalidateCombatClassification(__instance);
+			XjCultivatorCandidateIndex.MarkProgressionDirty(__instance);
 		}
 	}
 
@@ -105,6 +108,7 @@ internal static class XjRealmTraitGrantPatches
 		if (__result)
 		{
 			XjRuntimeActorInterestIndex.InvalidateCombatClassification(__instance);
+			XjCultivatorCandidateIndex.MarkProgressionDirty(__instance);
 		}
 	}
 }

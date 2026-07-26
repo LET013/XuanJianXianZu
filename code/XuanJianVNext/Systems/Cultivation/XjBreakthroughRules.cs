@@ -146,9 +146,7 @@ internal static class XjBreakthroughRules
 			return false;
 		}
 
-		int minimumStay = string.Equals(targetRealmId, XjRealmIds.LianQi, StringComparison.Ordinal) ? 5
-			: string.Equals(targetRealmId, XjRealmIds.ZhuJi, StringComparison.Ordinal) ? 15
-			: string.Equals(targetRealmId, XjRealmIds.ZiFu, StringComparison.Ordinal) ? 50 : 0;
+		int minimumStay = ResolveMinimumRealmStay(targetRealmId);
 		if (!ignoresChronologyLock && minimumStay > 0 && currentYear > 0)
 		{
 			if (!XjActorAccessor.TryGetInt(actor, XjActorDataKeys.RealmEnteredYear, out int enteredYear)
@@ -171,12 +169,20 @@ internal static class XjBreakthroughRules
 	}
 
 
-	private static int ResolveMinimumBreakthroughAge(string targetRealmId)
+	internal static int ResolveMinimumBreakthroughAge(string targetRealmId)
 	{
 		// 年龄锁只保留“筑基”和“紫府”两个统一下限，不再按资质分档。
 		// 资质差距通过筑基阶段的年度真元效率体现，而不是让不同资质拥有不同准入年龄。
 		if (string.Equals(targetRealmId, XjRealmIds.ZhuJi, StringComparison.Ordinal)) return 30;
 		if (string.Equals(targetRealmId, XjRealmIds.ZiFu, StringComparison.Ordinal)) return 90;
+		return 0;
+	}
+
+	internal static int ResolveMinimumRealmStay(string targetRealmId)
+	{
+		if (string.Equals(targetRealmId, XjRealmIds.LianQi, StringComparison.Ordinal)) return 5;
+		if (string.Equals(targetRealmId, XjRealmIds.ZhuJi, StringComparison.Ordinal)) return 15;
+		if (string.Equals(targetRealmId, XjRealmIds.ZiFu, StringComparison.Ordinal)) return 50;
 		return 0;
 	}
 
@@ -361,7 +367,7 @@ internal static class XjBreakthroughRules
 			&& !string.IsNullOrWhiteSpace(resourceId);
 	}
 
-	private static bool CanAttemptByAptitude(int xjZz, string targetRealmId)
+	internal static bool CanAttemptByAptitude(int xjZz, string targetRealmId)
 	{
 		if (string.Equals(targetRealmId, XjRealmIds.JinDan, StringComparison.Ordinal))
 		{

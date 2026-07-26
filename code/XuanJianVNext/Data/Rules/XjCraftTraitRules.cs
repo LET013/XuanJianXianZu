@@ -1,5 +1,7 @@
 ﻿using System;
 using XuanJianVNext.Systems.Craft;
+using XuanJianVNext.Systems.ActorSystem;
+using XuanJianVNext.Systems.Runtime;
 
 namespace XuanJianVNext.Data.Rules;
 
@@ -59,6 +61,7 @@ internal static class XjCraftTraitRules
 		bool granted = actor.addTrait(traitId, false);
 		if (granted)
 		{
+			MarkActivated(actor, XjAnnualExecutionContext.ResolveYear(actor));
 			NormalizeExclusive(actor, traitId);
 			XjCraftActorIndex.Observe(actor);
 		}
@@ -68,8 +71,31 @@ internal static class XjCraftTraitRules
 	internal static void HandleTraitGranted(Actor actor, string traitId, bool granted)
 	{
 		if (!granted || actor?.data == null || !IsCraftTraitId(traitId)) return;
+		MarkActivated(actor, XjAnnualExecutionContext.ResolveYear(actor));
 		NormalizeExclusive(actor, traitId);
 		XjCraftActorIndex.Observe(actor);
+	}
+
+	internal static bool IsActiveInYear(Actor actor, int annualYear)
+	{
+		if (actor?.data == null || annualYear <= 0 || !HasAnyCraftTrait(actor)) return false;
+		if (!XjActorAccessor.TryGetInt(actor, XjActorDataKeys.XjCraftActivatedYear, out int activatedYear)
+			|| activatedYear <= 0)
+		{
+			// Stage1-5 saves have no activation timestamp. Stage6 baselines the
+			// secondary cursor at load, so the first subsequent exact year is a safe
+			// migration origin and does not fabricate historical production.
+			activatedYear = annualYear;
+			XjActorAccessor.SetInt(actor, XjActorDataKeys.XjCraftActivatedYear, activatedYear);
+		}
+		return annualYear >= activatedYear;
+	}
+
+	private static void MarkActivated(Actor actor, int year)
+	{
+		if (actor?.data == null) return;
+		int safeYear = Math.Max(1, year);
+		XjActorAccessor.SetInt(actor, XjActorDataKeys.XjCraftActivatedYear, safeYear);
 	}
 
 	internal static void NormalizeExclusive(Actor actor, string preferredTraitId = null)

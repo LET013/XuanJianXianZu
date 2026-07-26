@@ -121,6 +121,14 @@
       "Callback": "XuanJianConfig:ShowFpsOverlayCallBack"
     },
     {
+      "Id": "XuanJian_config_stage0_observation",
+      "Name": "年度链路与长局生态观测",
+      "Description": "默认关闭。开启后每100年分帧统计年度积压、周期机会、境界分布和突破阻塞，并生成长局生态、紫府/金丹断档与高境断代预警；只观测和导出，不自动调整概率、门槛或修炼结果。",
+      "Type": "SWITCH",
+      "BoolVal": false,
+      "Callback": "XuanJianConfig:StageZeroObservationCallBack"
+    },
+    {
       "Id": "XuanJian_config_allow_sect_rebellion",
       "Name": "允许宗门叛乱",
       "Description": "开启后，满足高阶修士、距离与城镇数量条件的远方城镇可另立新宗；关闭后宗门领土不会分裂",
@@ -249,6 +257,3 @@
     }
   ]
 }
-
-
-

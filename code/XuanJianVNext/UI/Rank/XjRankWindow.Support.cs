@@ -1,8 +1,7 @@
-﻿using System;
+using System;
 using NeoModLoader.General;
 using UnityEngine;
 using UnityEngine.EventSystems;
-using XuanJianVNext.UI.Common;
 
 namespace XuanJianVNext.UI.Rank;
 internal sealed class XjRankWindowUpdater : MonoBehaviour
@@ -57,7 +56,7 @@ internal sealed class XjRankFilterSetting
 		Func<Actor, bool> filterFunc)
 	{
 		Id = id ?? string.Empty;
-		DisplayName = string.IsNullOrWhiteSpace(displayName) ? "\u672a\u547d\u540d\u7b5b\u9009" : displayName.Trim();
+		DisplayName = string.IsNullOrWhiteSpace(displayName) ? "未命名筛选" : displayName.Trim();
 		Icon = icon;
 		InnerIcon = innerIcon;
 		IconColor = iconColor;
@@ -82,13 +81,14 @@ internal sealed class XjRankFilterSetting
 			_ => Color.white
 		};
 	}
+
 	internal string GetTypeText()
 	{
 		return Type switch
 		{
-			XjRankFilterType.And => "\u4e0e",
-			XjRankFilterType.Or => "\u6216",
-			XjRankFilterType.Not => "\u975e",
+			XjRankFilterType.And => "与",
+			XjRankFilterType.Or => "或",
+			XjRankFilterType.Not => "非",
 			_ => "?"
 		};
 	}
@@ -102,21 +102,18 @@ internal sealed class XjRankTooltipTrigger : MonoBehaviour, IPointerEnterHandler
 
 	public void OnPointerEnter(PointerEventData eventData)
 	{
-		string title = XjNativeHoverTooltip.NormalizeDisplayText(TooltipText);
-		string description = XjNativeHoverTooltip.NormalizeDisplayText(TooltipDescription);
-		if (_hovering || string.IsNullOrWhiteSpace(title))
+		if (_hovering || string.IsNullOrWhiteSpace(TooltipText))
 		{
 			return;
 		}
-
-		XjNativeHoverTooltip.RegisterPassthrough(title, description);
 		_hovering = true;
 		Tooltip.show(gameObject, "tip", new TooltipData
 		{
-			tip_name = title,
-			tip_description = description
+			tip_name = TooltipText,
+			tip_description = TooltipDescription ?? string.Empty
 		});
 	}
+
 	public void OnPointerExit(PointerEventData eventData)
 	{
 		if (!_hovering)

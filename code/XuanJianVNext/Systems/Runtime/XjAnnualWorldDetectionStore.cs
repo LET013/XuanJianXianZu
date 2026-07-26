@@ -18,6 +18,7 @@ namespace XuanJianVNext.Systems.Runtime;
 internal static class XjAnnualWorldDetectionStore
 {
 	private static int _snapshotYear;
+	private static int _snapshotProgressionRevision = -1;
 	private static List<XjCenturySummaryItemRecord> _realmStatistics = new List<XjCenturySummaryItemRecord>();
 	private static List<XjCenturySummaryItemRecord> _daoSummaries = new List<XjCenturySummaryItemRecord>();
 
@@ -33,6 +34,11 @@ internal static class XjAnnualWorldDetectionStore
 		{
 			return true;
 		}
+		if (year == _snapshotYear
+			&& _snapshotProgressionRevision != XjScheduler.ActorProgressionRevision)
+		{
+			return true;
+		}
 		if (year < _snapshotYear)
 		{
 			return true;
@@ -44,6 +50,12 @@ internal static class XjAnnualWorldDetectionStore
 	{
 		if (year <= 0)
 		{
+			return;
+		}
+		int progressionRevision = XjScheduler.ActorProgressionRevision;
+		if (_snapshotYear == year && _snapshotProgressionRevision == progressionRevision)
+		{
+			XjStageZeroObservation.RecordWorldSnapshotDuplicateSkip();
 			return;
 		}
 
@@ -109,6 +121,7 @@ internal static class XjAnnualWorldDetectionStore
 
 		List<XjCenturySummaryItemRecord> dao = BuildDaoSummaries(daoStats);
 		_snapshotYear = year;
+		_snapshotProgressionRevision = progressionRevision;
 		_realmStatistics = realm;
 		_daoSummaries = dao;
 	}
@@ -120,7 +133,9 @@ internal static class XjAnnualWorldDetectionStore
 	{
 		realmStatistics = null;
 		daoSummaries = null;
-		if (year <= 0 || _snapshotYear != year)
+		if (year <= 0
+			|| _snapshotYear != year
+			|| _snapshotProgressionRevision != XjScheduler.ActorProgressionRevision)
 		{
 			return false;
 		}
@@ -133,6 +148,7 @@ internal static class XjAnnualWorldDetectionStore
 	internal static void Clear()
 	{
 		_snapshotYear = 0;
+		_snapshotProgressionRevision = -1;
 		_realmStatistics.Clear();
 		_daoSummaries.Clear();
 	}

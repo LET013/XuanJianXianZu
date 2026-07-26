@@ -165,7 +165,8 @@ internal static class XjDengMingShiWindow
 		});
 
 		TipButton tip = row.AddComponent<TipButton>();
-		XjNativeHoverTooltip.Ensure(tip, actorName, "保存时间：" + (packet?.SaveTime ?? "未知") + "\n跨世界完整人物数据", string.Empty);
+		tip.textOnClick = actorName;
+		tip.textOnClickDescription = "保存时间：" + (packet?.SaveTime ?? "未知") + "\n跨世界完整人物数据";
 	}
 
 	private static Text CreateText(Transform p, string n, Vector2 pos, Vector2 size, int fs, TextAnchor a)

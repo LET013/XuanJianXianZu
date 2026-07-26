@@ -110,6 +110,16 @@ internal static class XjFamilyFaBaoWarehouse
 	private static readonly HashSet<long> explicitlyExtinctFamilyScratch = new HashSet<long>();
 
 	internal static bool HasLostEntries => lostEntries.Count > 0;
+
+	internal static bool HasLostEntriesAtOrBeforeYear(int year)
+	{
+		if (year <= 0) return false;
+		for (int i = 0; i < lostEntries.Count; i++)
+		{
+			if (lostEntries[i].Year <= year) return true;
+		}
+		return false;
+	}
 	internal static bool HasFamilyEntries => entryKeys.Count > 0;
 	internal static bool HasSectEntries => sectEntryKeys.Count > 0;
 
@@ -1058,14 +1068,27 @@ internal static class XjFamilyFaBaoWarehouse
 
 	private static int PickLostEntryIndex(long actorId, int year)
 	{
-		if (lostEntries.Count == 0)
+		if (lostEntries.Count == 0 || year <= 0)
 		{
 			return -1;
 		}
 
+		int eligibleCount = 0;
+		for (int i = 0; i < lostEntries.Count; i++)
+		{
+			if (lostEntries[i].Year <= year) eligibleCount++;
+		}
+		if (eligibleCount <= 0) return -1;
+
 		long mixed = actorId * 1103515245L + year * 12345L;
 		int seed = (int)System.Math.Abs(mixed % 2147483647L);
-		return seed % lostEntries.Count;
+		int eligibleIndex = seed % eligibleCount;
+		for (int i = 0; i < lostEntries.Count; i++)
+		{
+			if (lostEntries[i].Year > year) continue;
+			if (eligibleIndex-- == 0) return i;
+		}
+		return -1;
 	}
 
 	private static string BuildOwnedKey(long familyStableId, long sectId, string faBaoId, string daoTu)

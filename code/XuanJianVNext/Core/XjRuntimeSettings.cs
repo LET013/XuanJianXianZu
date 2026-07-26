@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections;
 using System.Globalization;
 using System.Reflection;
@@ -55,6 +55,7 @@ internal static class XjRuntimeSettings
 	private static bool broadcastHighRealmInfluence = true;
 	private static bool cultivationEnabled = true;
 	private static bool showFpsOverlay;
+	private static bool stageZeroObservation = false;
 	private static bool allowSectRebellion;
 	private static bool spawnJinXingYaoXie = true;
 	private static bool spawnLongShu = true;
@@ -92,6 +93,7 @@ internal static class XjRuntimeSettings
 	internal static bool BroadcastHighRealmInfluenceEnabled => broadcastHighRealmInfluence;
 	internal static bool CultivationEnabled => cultivationEnabled;
 	internal static bool ShowFpsOverlayEnabled => showFpsOverlay;
+	internal static bool StageZeroObservationEnabled => stageZeroObservation;
 	internal static bool AllowSectRebellionEnabled => allowSectRebellion;
 	internal static bool SpawnJinXingYaoXieEnabled => spawnJinXingYaoXie;
 	internal static bool SpawnLongShuEnabled => spawnLongShu;
@@ -128,6 +130,7 @@ internal static class XjRuntimeSettings
 		SetBroadcastHighRealmInfluence(ReadBool(modConfig, "XuanJian_config_enable_highrealm_influence_announcement", broadcastHighRealmInfluence));
 		SetCultivationEnabled(ReadBool(modConfig, "XuanJian_config_enable_cultivation", cultivationEnabled));
 		SetShowFpsOverlay(ReadBool(modConfig, "XuanJian_config_show_fps_overlay", showFpsOverlay));
+		SetStageZeroObservation(ReadBool(modConfig, "XuanJian_config_stage0_observation", stageZeroObservation));
 		SetAllowSectRebellion(ReadBool(modConfig, "XuanJian_config_allow_sect_rebellion", allowSectRebellion));
 		SetSpawnJinXingYaoXie(ReadBool(modConfig, "XuanJian_config_enable_yao_xie_generation", spawnJinXingYaoXie));
 		SetSpawnLongShu(ReadBool(modConfig, "XuanJian_config_enable_longshu_generation", spawnLongShu));
@@ -182,6 +185,14 @@ internal static class XjRuntimeSettings
 	internal static void SetBroadcastHighRealmInfluence(bool value) => SetBool(ref broadcastHighRealmInfluence, value);
 	internal static void SetCultivationEnabled(bool value) => SetBool(ref cultivationEnabled, value);
 	internal static void SetShowFpsOverlay(bool value) => SetBool(ref showFpsOverlay, value);
+	internal static void SetStageZeroObservation(bool value)
+	{
+		SetBool(ref stageZeroObservation, value);
+		if (!value)
+		{
+			XjStageZeroObservation.Clear();
+		}
+	}
 	internal static void SetAllowSectRebellion(bool value) => SetBool(ref allowSectRebellion, value);
 	internal static void SetSpawnJinXingYaoXie(bool value) => SetBool(ref spawnJinXingYaoXie, value);
 	internal static void SetSpawnLongShu(bool value) => SetBool(ref spawnLongShu, value);

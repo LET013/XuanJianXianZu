@@ -1,3 +1,4 @@
+using System;
 using XuanJianVNext.Core;
 using XuanJianVNext.Data.History;
 using XuanJianVNext.Data.LingWu;
@@ -9,6 +10,7 @@ using XuanJianVNext.Systems.Family;
 using XuanJianVNext.Systems.History;
 using XuanJianVNext.Systems.History.Books;
 using XuanJianVNext.Systems.Warehouse;
+using XuanJianVNext.Systems.Runtime;
 
 namespace XuanJianVNext.Systems.LingWu;
 
@@ -23,18 +25,26 @@ internal static class XjZiFuLingWuOpportunitySystem
 
 	internal static bool IsDue(Actor actor, int currentYear)
 	{
-		if (actor?.data == null || currentYear <= 0) return false;
-		long actorId = ((BaseSystemData)actor.data).id;
-		if (actorId <= 0L) return false;
-		int offset = XjDeterministicHash.PositiveIndex(actorId, "zifu_lingwu_opportunity_interval", IntervalYears);
-		return (currentYear + offset) % IntervalYears == 0;
+		return TryResolveDueYear(actor, currentYear, out _);
 	}
 
 	internal static void TryGrant(Actor actor, int currentYear)
 	{
-		if (actor?.data == null || currentYear <= 0 || !actor.isAlive() || !IsDue(actor, currentYear)) return;
+		if (actor?.data == null || currentYear <= 0 || !actor.isAlive()) return;
 		string realmId = XjRealmHelper.GetUnifiedId(actor, XjRealmHelper.GetTraitSnapshotForRouter);
-		if (!string.Equals(realmId, XjRealmIds.ZiFu, System.StringComparison.Ordinal)) return;
+		if (!string.Equals(realmId, XjRealmIds.ZiFu, System.StringComparison.Ordinal)
+			|| !TryResolveDueYear(actor, currentYear, out int opportunityYear)
+			|| !XjProgressionOpportunityClock.HasExecutionSlot(
+				actor, XjActorDataKeys.XjZiFuLingWuLastExecutionYear, currentYear)) return;
+
+		XjProgressionOpportunityClock.MarkExecuted(
+			actor, XjActorDataKeys.XjZiFuLingWuLastExecutionYear, currentYear);
+		XjProgressionOpportunityClock.ConsumeIntervalDueYear(
+			actor,
+			XjActorDataKeys.XjZiFuLingWuNextOpportunityYear,
+			opportunityYear,
+			IntervalYears);
+		XjStageZeroObservation.RecordOpportunityDebtConsumed("ZiFuLingWu", opportunityYear, currentYear);
 
 		long actorId = ((BaseSystemData)actor.data).id;
 		if (actorId <= 0L
@@ -49,7 +59,7 @@ internal static class XjZiFuLingWuOpportunitySystem
 		}
 
 		string salt = "zifu_lingwu_opportunity|" + familyStableId + "|" + daoTu;
-		if (XjDeterministicHash.PositiveIndex(actorId + currentYear, salt, 10000) >= ChancePerTenThousand)
+		if (XjDeterministicHash.PositiveIndex(actorId + opportunityYear, salt, 10000) >= ChancePerTenThousand)
 		{
 			return;
 		}
@@ -82,4 +92,30 @@ internal static class XjZiFuLingWuOpportunitySystem
 			mirrorToWorldLog: false);
 		XjBroadcastSystem.BroadcastBLevelWorldEvent("【紫府得灵】" + body, XjEventIconCatalog.LingWuAppear);
 	}
+	private static bool TryResolveDueYear(Actor actor, int currentYear, out int dueYear)
+	{
+		dueYear = 0;
+		if (actor?.data == null || currentYear <= 0) return false;
+		long actorId = ((BaseSystemData)actor.data).id;
+		if (actorId <= 0L) return false;
+
+		int offset = XjDeterministicHash.PositiveIndex(actorId, "zifu_lingwu_opportunity_interval", IntervalYears);
+		if (!XjActorAccessor.TryGetInt(actor, XjActorDataKeys.XjZiFuLingWuNextOpportunityYear, out int nextDueYear)
+			|| nextDueYear <= 0)
+		{
+			// 旧档没有可证明的历史灵物判定年份，首次迁移从当前年开始建钟，
+			// 不按紫府进入年凭空补发已经无法核验的历史机会。之后所有跳年都会保债。
+			int baseline = currentYear;
+			nextDueYear = Math.Max(1, baseline);
+			for (int i = 0; i < IntervalYears; i++, nextDueYear++)
+			{
+				if ((nextDueYear + offset) % IntervalYears == 0) break;
+			}
+			XjActorAccessor.SetInt(actor, XjActorDataKeys.XjZiFuLingWuNextOpportunityYear, nextDueYear);
+		}
+
+		dueYear = nextDueYear;
+		return dueYear <= currentYear;
+	}
+
 }

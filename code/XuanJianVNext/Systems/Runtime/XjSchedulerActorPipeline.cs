@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using XuanJianVNext.Data.CaiQi;
 using XuanJianVNext.Data.Events;
 using XuanJianVNext.Data.GongFa;
@@ -34,7 +34,16 @@ internal enum XjAnnualPipelineStage : byte
 {
 	Prepare = 0,
 	Progression = 1,
+	// Stage1 saves may persist this value after core progression. Stage2 treats
+	// it as a legacy maintenance marker and migrates it into the maintenance lane.
 	Finalize = 2
+}
+
+internal enum XjAnnualMaintenanceStage : byte
+{
+	Identity = 0,
+	Ancillary = 1,
+	Assets = 2
 }
 
 [Flags]
@@ -106,8 +115,46 @@ internal static class XjSchedulerActorPipeline
 					return ProcessPrepareStage(actor, annualYear, out nextStage);
 				case XjAnnualPipelineStage.Progression:
 					return ProcessProgressionStage(actor, annualYear, enqueueJinDanCombat, out nextStage);
-				case XjAnnualPipelineStage.Finalize:
-					ProcessFinalizeStage(actor, annualYear);
+				// Finalize is no longer executed on the core lane. The scheduler consumes
+				// this value only as a Stage1 save migration marker.
+				default:
+					return false;
+			}
+		}
+	}
+
+	internal static bool ProcessMaintenanceStage(
+		Actor actor,
+		int fromYearInclusive,
+		int annualYear,
+		XjAnnualMaintenanceStage stage,
+		out XjAnnualMaintenanceStage nextStage)
+	{
+		nextStage = stage;
+		if (actor?.data == null || !actor.isAlive() || annualYear <= 0
+			|| IsBoatLikeActor(actor))
+		{
+			return false;
+		}
+
+		int qualifiedYear = XjScheduler.ReadCultivationQualifiedYear(actor);
+		int fromYear = Math.Max(Math.Max(1, fromYearInclusive), qualifiedYear > 0 ? qualifiedYear : 1);
+		if (annualYear < fromYear) return false;
+
+		using (XjAnnualExecutionContext.Enter(annualYear))
+		{
+			switch (stage)
+			{
+				case XjAnnualMaintenanceStage.Identity:
+					ProcessMaintenanceIdentityStage(actor, fromYear, annualYear);
+					nextStage = XjAnnualMaintenanceStage.Ancillary;
+					return true;
+				case XjAnnualMaintenanceStage.Ancillary:
+					ProcessMaintenanceAncillaryStage(actor, fromYear, annualYear);
+					nextStage = XjAnnualMaintenanceStage.Assets;
+					return true;
+				case XjAnnualMaintenanceStage.Assets:
+					ProcessMaintenanceAssetsStage(actor, fromYear, annualYear);
 					return false;
 				default:
 					return false;
@@ -115,11 +162,67 @@ internal static class XjSchedulerActorPipeline
 		}
 	}
 
+	internal static bool HasSecondaryAnnualInterest(Actor actor)
+	{
+		if (actor?.data == null || !actor.isAlive()) return false;
+		long actorId = ((BaseSystemData)actor.data).id;
+		int realmTier = ResolveRealmTier(actor);
+		return XjWeaponArtSystem.HasAnnualInterest(actor)
+			|| XjCraftActorIndex.Contains(actorId)
+			|| realmTier >= XjRealmSuppression.TierZhuJi
+			|| realmTier >= XjRealmSuppression.TierJinDan
+			|| (realmTier > XjRealmSuppression.TierNone && XjFamilyFaBaoWarehouse.HasLostEntries);
+	}
+
+	/// <summary>
+	/// Exact-year secondary gameplay. Unlike coalesced compatibility maintenance,
+	/// these systems change proficiency, production or annual chance outcomes and
+	/// therefore consume every queued logical year in order.
+	/// </summary>
+	internal static void ProcessSecondaryAnnual(Actor actor, int annualYear)
+	{
+		if (actor?.data == null || !actor.isAlive() || annualYear <= 0 || IsBoatLikeActor(actor)) return;
+		string realmIdAtYear = ResolveRealmIdAtYear(actor, annualYear);
+		using (XjAnnualExecutionContext.Enter(annualYear, actor, realmIdAtYear))
+		{
+			long actorId = ((BaseSystemData)actor.data).id;
+			int realmTier = XjRealmSuppression.GetRealmTierFromIdForRuntime(realmIdAtYear);
+			if (XjWeaponArtSystem.IsActiveInYear(actor, annualYear))
+			{
+				RunSecondaryStep(actorId, annualYear, "WeaponArt", () => XjWeaponArtSystem.TickActor(actor, annualYear));
+			}
+			if (XjCraftActorIndex.Contains(actorId)
+				&& XjCraftTraitRules.IsActiveInYear(actor, annualYear))
+			{
+				RunSecondaryStep(actorId, annualYear, "Craft", () =>
+				{
+					long craftSample = XjRuntimeDiagnostics.BeginSample(XjRuntimeHotspot.AnnualCraft, 31);
+					try { XjCraftAnnualRouter.TickActor(actor, annualYear); }
+					finally { XjRuntimeDiagnostics.EndSample(XjRuntimeHotspot.AnnualCraft, craftSample); }
+				});
+			}
+			if (realmTier >= XjRealmSuppression.TierZhuJi)
+			{
+				RunSecondaryStep(actorId, annualYear, "FaBaoForge", () =>
+				{
+					XjFaBaoAcquisition.TryForgeAnnualIfMissing(actor, realmIdAtYear, annualYear);
+					XjEquipmentForgeConsumer.TryForgeAnnual(actor, realmIdAtYear, annualYear);
+				});
+			}
+			if (realmTier > XjRealmSuppression.TierNone)
+			{
+				RunSecondaryStep(actorId, annualYear, "LostFaBao", () => ProcessLostFaBaoDiscovery(actor, annualYear));
+			}
+			if (realmTier >= XjRealmSuppression.TierJinDan)
+			{
+				RunSecondaryStep(actorId, annualYear, "JinDanGift", () => XjJinDanBreakthroughSystem.TickAnnualGift(actor, annualYear));
+			}
+		}
+	}
+
 	private static bool ProcessPrepareStage(Actor actor, int annualYear, out XjAnnualPipelineStage nextStage)
 	{
 		nextStage = XjAnnualPipelineStage.Progression;
-		// 资格已经由 updateAge 的单一入口和调度器入队检查完成。
-		// 读档专用的仪对影修复只在 bounded bootstrap 执行，年度不再重复。
 		long actorId = ((BaseSystemData)actor.data).id;
 		if (XjVanillaDeathGuard.EnforceHardLifespanLimit(actor))
 		{
@@ -128,15 +231,19 @@ internal static class XjSchedulerActorPipeline
 		if (XjYinSiTraitLifecycle.IsYinSi(actor))
 		{
 			XjYinSiTraitLifecycle.EnsureTransientState(actor);
-			nextStage = XjAnnualPipelineStage.Finalize;
 			return false;
 		}
+
 		int realmTier = ResolveRealmTier(actor);
 		bool isZiFuOrAbove = realmTier >= XjRealmSuppression.TierZiFu;
 		bool isJinDan = realmTier >= XjRealmSuppression.TierJinDan;
 		bool isYaoXie = XjTrueDamageSystem.IsJinXingYaoXie(actor);
 		EnsureMissingDaoTuForEnteredCultivator(actor, realmTier);
+		XjProgressionCandidateState candidateState =
+			XjCultivatorCandidateIndex.GetOrRefreshProgression(actor, annualYear);
 
+		// These are progression-state compatibility repairs. High-realm detection
+		// reads them in the immediately following core stage, so they remain here.
 		if (XjJinDanResidualJinXing.HasLegacyTrait(actor)
 			|| XjActorAccessor.TryGetString(actor, XjActorDataKeys.XjJinDanResidualJinXingSource, out string residualSource)
 				&& !string.IsNullOrWhiteSpace(residualSource))
@@ -158,52 +265,8 @@ internal static class XjSchedulerActorPipeline
 		{
 			XjTrueDamageSystem.EnsureJinXingYaoXieCompanion(actor);
 		}
-		if (realmTier < XjRealmSuppression.TierZhuJi
-			&& !isYaoXie
-			&& !XjLongShuSystem.IsLongShu(actor))
-		{
-			return ProcessLowRealmPrepareStage(actor, actorId, realmTier, annualYear);
-		}
 
-		if (!XjLongShuSystem.IsLongShu(actor))
-		{
-			if (isZiFuOrAbove)
-			{
-				bool hasConfirmedFamily = XjFamilyMemberIndex.Shared.TryGetRecord(actorId, out XjFamilyIdentity highRealmIdentity)
-					&& highRealmIdentity.Found
-					&& highRealmIdentity.FamilyStableIdValue > 0L;
-				if (!hasConfirmedFamily
-					|| XjFamilyMemberIndex.Shared.IsActorPending(actorId)
-					|| !actor.hasClan())
-				{
-					XjFamilyMemberIndex.Shared.EnsureHighRealmFamily(actor);
-				}
-			}
-			else if (XjDetectionGate.IsEntityMaintenanceSlot(XjEntityDetectionJob.FamilyIdentityRepair, actorId, annualYear)
-				&& !XjFamilyMemberIndex.Shared.TryGetRecord(actorId, out _)
-				&& !XjFamilyMemberIndex.Shared.IsActorPending(actorId))
-			{
-				XjFamilyMemberIndex.Shared.AddActorToFamily(actor);
-			}
-		}
-
-		// City branch and surname repair are maintenance, not cultivation growth.
-		// Stagger ordinary cultivators across five years; high realms retain yearly
-		// reconciliation because their sect and city ownership may change directly.
-		if (isZiFuOrAbove
-			|| (XjDetectionGate.IsEntityMaintenanceSlot(XjEntityDetectionJob.FamilyBranchAndSurname, actorId, annualYear)
-				&& XjFamilyMemberIndex.Shared.TryGetRecord(actorId, out XjFamilyIdentity maintenanceIdentity)
-				&& maintenanceIdentity.Found))
-		{
-			XjFamilyMemberIndex.Shared.ReconcileCityBranch(actor, annualYear);
-
-			// 原生婚姻/氏族可能让同一玄鉴父系家族出现不同姓氏。
-			// 家族身份确认后按根角色姓氏统一，并在年度管线治理旧存档。
-			XjFamilySurnamePolicy.EnsureForConfirmedActor(actor);
-		}
-
-		// 紫府本命灵宝只消耗紫府灵物。灵物机缘按角色错峰到五年槽，
-		// 每五年判定一次10%，不再让所有紫府每年进入机缘逻辑。
+		// Stage1 opportunity clocks belong to progression, not compatibility maintenance.
 		if (realmTier == XjRealmSuppression.TierZiFu
 			&& !isYaoXie
 			&& XjZiFuLingWuOpportunitySystem.IsDue(actor, annualYear))
@@ -211,42 +274,32 @@ internal static class XjSchedulerActorPipeline
 			XjZiFuLingWuOpportunitySystem.TryGrant(actor, annualYear);
 		}
 
-		// 金性借用依赖已经确认的家族稳定 ID，必须放在家族补录之后。
-		// 只有寿元将尽者才可能满足借用条件，普通修士不应每年都查询家族重宝仓库。
 		if (isZiFuOrAbove && IsNearNaturalLifespan(actor))
 		{
+			// Borrowing needs a stable family id. Only the near-death subset receives
+			// this targeted repair on the guaranteed core lane.
+			if (!XjLongShuSystem.IsLongShu(actor)
+				&& (!XjFamilyMemberIndex.Shared.TryGetRecord(actorId, out XjFamilyIdentity identity)
+					|| !identity.Found
+					|| identity.FamilyStableIdValue <= 0L))
+			{
+				XjFamilyMemberIndex.Shared.EnsureHighRealmFamily(actor);
+			}
 			XjJinDanResidualJinXing.TryBorrowForReincarnation(actor, annualYear);
 		}
 
-		// 仙基上限修复只针对已写入仙基状态的角色。新角色、没有仙基的
-		// 高境界修士不需要每年重新拆分并比较字符串。
 		if (XjActorAccessor.TryGetInt(actor, XjActorDataKeys.XjXianJiCount, out int legacyXianJiCount)
 			&& legacyXianJiCount > 0)
 		{
 			XjXianJiAccessor.ReconcileRealmLimit(actor);
 		}
-		if (!isYaoXie && actor.hasTrait("madness"))
-		{
-			XjVisibleTraitSync.EnsureCultivatorNoMadness(actor);
-		}
-		if (isZiFuOrAbove
-			|| (realmTier >= XjRealmSuppression.TierZhuJi
-				&& XjDetectionGate.IsEntityMaintenanceSlot(XjEntityDetectionJob.SectCityObservation, actorId, annualYear)
-				&& HasZongMenIdentity(actor)))
-		{
-			XjZongMenCultivatorCityIndex.Observe(actor);
-		}
-
-		// 求金法仓库回流只用于旧状态修复；新获得、入族和入宗都有定向
-		// 写入入口，不应让每一名修士每年扫描一次乾坤袋与两级仓库。
-		if (isZiFuOrAbove && XjDetectionGate.IsEntityMaintenanceSlot(XjEntityDetectionJob.QiuJinWarehouseReconcile, actorId, annualYear))
-		{
-			XjQiuJinFaWarehouseReconciler.ReconcileActor(actor, annualYear);
-		}
-
-		if (realmTier <= XjRealmSuppression.TierLianQi)
+		bool caiQiDue = realmTier <= XjRealmSuppression.TierLianQi
+			&& candidateState.ShouldProcessCaiQi(annualYear);
+		XjStageZeroObservation.RecordCandidateRouting("CaiQi", caiQiDue);
+		if (caiQiDue)
 		{
 			ProcessCaiQiCompletion(actor, annualYear);
+			XjCultivatorCandidateIndex.RefreshProgression(actor, annualYear);
 		}
 		if (XjAptitudeTraitLifecycle.HasAnnualInterest(actor, annualYear))
 		{
@@ -255,39 +308,6 @@ internal static class XjSchedulerActorPipeline
 		return true;
 	}
 
-	private static bool ProcessLowRealmPrepareStage(Actor actor, long actorId, int realmTier, int annualYear)
-	{
-		// 胎息、炼气和未入道资质者的年度职责只保留修炼链路必需项。
-		// 家族/姓氏修复降为五年维护槽；宗门、法宝、金丹遗留和仙基修复
-		// 都由筑基以上或对应状态写入入口负责，避免数百低境修士每年跑完整维护。
-		if (XjDetectionGate.IsEntityMaintenanceSlot(XjEntityDetectionJob.FamilyBranchAndSurname, actorId, annualYear))
-		{
-			if (XjFamilyMemberIndex.Shared.TryGetRecord(actorId, out XjFamilyIdentity identity)
-				&& identity.Found)
-			{
-				XjFamilyMemberIndex.Shared.ReconcileCityBranch(actor, annualYear);
-				XjFamilySurnamePolicy.EnsureForConfirmedActor(actor);
-			}
-			else if (!XjFamilyMemberIndex.Shared.IsActorPending(actorId))
-			{
-				XjFamilyMemberIndex.Shared.AddActorToFamily(actor);
-			}
-		}
-
-		if (actor.hasTrait("madness"))
-		{
-			XjVisibleTraitSync.EnsureCultivatorNoMadness(actor);
-		}
-		if (realmTier <= XjRealmSuppression.TierLianQi)
-		{
-			ProcessCaiQiCompletion(actor, annualYear);
-		}
-		if (XjAptitudeTraitLifecycle.HasAnnualInterest(actor, annualYear))
-		{
-			XjAptitudeTraitLifecycle.TickAnnual(actor, annualYear);
-		}
-		return true;
-	}
 
 	private static void EnsureMissingDaoTuForEnteredCultivator(Actor actor, int realmTier)
 	{
@@ -314,14 +334,9 @@ internal static class XjSchedulerActorPipeline
 		Action<long> enqueueJinDanCombat,
 		out XjAnnualPipelineStage nextStage)
 	{
-		nextStage = XjAnnualPipelineStage.Finalize;
+		nextStage = XjAnnualPipelineStage.Progression;
 		XjManualRealmTraitReconciliation.TickPendingManualJinDan(actor, annualYear);
 		XjAnnualActorProfile profile = ResolveProgressionProfile(actor);
-		// 高阶宗门成员不能被原生迁城留在外邦；筑基及以下无需进入城市迁移桥。
-		if (profile.RealmTier >= XjRealmSuppression.TierZiFu)
-		{
-			XjSectHighRealmResidenceSystem.Enforce(actor, annualYear);
-		}
 		long snapshotSample = XjRuntimeDiagnostics.BeginSample(XjRuntimeHotspot.AnnualSnapshot, 31);
 		XjActorCultivationSnapshot annualSnapshot = XjActorCultivationSnapshotBuilder.BuildAnnualProgression(actor, profile.RealmTier);
 		XjRuntimeDiagnostics.EndSample(XjRuntimeHotspot.AnnualSnapshot, snapshotSample);
@@ -330,8 +345,13 @@ internal static class XjSchedulerActorPipeline
 		XjRuntimeDiagnostics.EndSample(XjRuntimeHotspot.AnnualCultivationGrowth, growthSample);
 		if (didGrow)
 		{
+			XjProgressionCandidateState candidateState =
+				XjCultivatorCandidateIndex.RefreshAfterGrowth(actor, annualYear);
 			bool qingXuanChecked = false;
-			if (ShouldProcessQingXuan(actor, annualSnapshot))
+			bool qingXuanDue = candidateState.Has(XjProgressionCandidateFlags.QingXuan)
+				&& ShouldProcessQingXuan(actor, annualSnapshot);
+			XjStageZeroObservation.RecordCandidateRouting("QingXuan", qingXuanDue);
+			if (qingXuanDue)
 			{
 				qingXuanChecked = true;
 				long qingXuanSample = XjRuntimeDiagnostics.BeginSample(XjRuntimeHotspot.AnnualQingXuan, 31);
@@ -343,81 +363,51 @@ internal static class XjSchedulerActorPipeline
 				&& !string.Equals(postQingXuanDaoTu, annualSnapshot.DaoTu, StringComparison.Ordinal))
 			{
 				long rebuildSnapshotSample = XjRuntimeDiagnostics.BeginSample(XjRuntimeHotspot.AnnualSnapshot, 31);
-				annualSnapshot = XjActorCultivationSnapshotBuilder.Build(actor);
+				annualSnapshot = XjActorCultivationSnapshotBuilder.BuildAnnualProgression(actor, ResolveRealmTier(actor));
 				XjRuntimeDiagnostics.EndSample(XjRuntimeHotspot.AnnualSnapshot, rebuildSnapshotSample);
 			}
-			// Growth only mutates true essence. Re-read that one field instead of
-			// rebuilding the full cultivation/FaBao snapshot in the same annual pass.
 			else if (XjActorAccessor.TryGetFloat(actor, XjActorDataKeys.ZhenYuan, out float postGrowthZhenYuan))
 			{
 				annualSnapshot = annualSnapshot.WithZhenYuan(postGrowthZhenYuan);
 			}
-			if (ShouldProcessGongFa(actor, annualSnapshot, profile.RealmTier, annualYear))
+
+			candidateState = XjCultivatorCandidateIndex.GetOrRefreshProgression(actor, annualYear);
+			bool gongFaDue = candidateState.ShouldProcessGongFa(annualYear);
+			XjStageZeroObservation.RecordCandidateRouting("GongFa", gongFaDue);
+			if (gongFaDue && ShouldProcessGongFa(actor, annualSnapshot, profile.RealmTier, annualYear))
 			{
 				long gongFaSample = XjRuntimeDiagnostics.BeginSample(XjRuntimeHotspot.AnnualGongFa, 31);
 				ProcessGongFa(actor, annualSnapshot, annualYear);
 				XjRuntimeDiagnostics.EndSample(XjRuntimeHotspot.AnnualGongFa, gongFaSample);
-				// 功法升品、借法和道途校准都会影响后续神通/求金条件。
-				// 只在真正进入过功法阶段后局部重建一次，避免同年继续使用旧快照。
-				annualSnapshot = XjActorCultivationSnapshotBuilder.Build(actor);
+				annualSnapshot = XjActorCultivationSnapshotBuilder.BuildAnnualProgression(actor, ResolveRealmTier(actor));
+				candidateState = XjCultivatorCandidateIndex.RefreshProgression(actor, annualYear);
 			}
-			if (profile.Has(XjAnnualInterest.HighRealm))
+
+			bool highRealmDue = candidateState.Has(XjProgressionCandidateFlags.HighRealm);
+			XjStageZeroObservation.RecordCandidateRouting("HighRealm", highRealmDue);
+			if (highRealmDue)
 			{
 				long highRealmSample = XjRuntimeDiagnostics.BeginSample(XjRuntimeHotspot.AnnualHighRealm, 31);
 				ProcessHighRealm(actor, annualSnapshot, annualYear, enqueueJinDanCombat);
 				XjRuntimeDiagnostics.EndSample(XjRuntimeHotspot.AnnualHighRealm, highRealmSample);
-				annualSnapshot = XjActorCultivationSnapshotBuilder.Build(actor);
+				annualSnapshot = XjActorCultivationSnapshotBuilder.BuildAnnualProgression(actor, ResolveRealmTier(actor));
+				candidateState = XjCultivatorCandidateIndex.RefreshProgression(actor, annualYear);
+			}
+
+			bool breakthroughDue = candidateState.ShouldProcessBreakthrough(annualYear);
+			XjStageZeroObservation.RecordCandidateRouting("Breakthrough", breakthroughDue);
+			if (breakthroughDue && ShouldProcessBreakthrough(annualSnapshot))
+			{
+				long breakthroughSample = XjRuntimeDiagnostics.BeginSample(XjRuntimeHotspot.AnnualBreakthrough, 31);
+				ProcessBreakthrough(actor, annualSnapshot, annualYear);
+				XjRuntimeDiagnostics.EndSample(XjRuntimeHotspot.AnnualBreakthrough, breakthroughSample);
+				XjCultivatorCandidateIndex.RefreshProgression(actor, annualYear);
 			}
 		}
 
-		// ZiFu -> JinDan is owned by the high-realm pipeline and JinDan has no
-		// standard next realm. Avoid building a CaiQi snapshot for both branches.
-		if (didGrow
-			&& profile.Has(XjAnnualInterest.Breakthrough)
-			&& ShouldProcessBreakthrough(annualSnapshot))
-		{
-			long breakthroughSample = XjRuntimeDiagnostics.BeginSample(XjRuntimeHotspot.AnnualBreakthrough, 31);
-			ProcessBreakthrough(actor, annualSnapshot, annualYear);
-			XjRuntimeDiagnostics.EndSample(XjRuntimeHotspot.AnnualBreakthrough, breakthroughSample);
-		}
-
-		// 器艺属于修士年度成长，不占百艺名额；只结算当前终身绑定的一门兵器道路。
-		if (profile.RealmTier > XjRealmSuppression.TierNone)
-		{
-			XjWeaponArtSystem.TickActor(actor, annualYear);
-		}
-
-		// 修仙百艺复用既有修士年度管线，并由互斥职业路由保证每人只推进一项百艺主任务。
-		long actorId = ((BaseSystemData)actor.data).id;
-		if (XjCraftActorIndex.Contains(actorId))
-		{
-			long craftSample = XjRuntimeDiagnostics.BeginSample(XjRuntimeHotspot.AnnualCraft, 31);
-			XjCraftAnnualRouter.TickActor(actor, annualYear);
-			XjRuntimeDiagnostics.EndSample(XjRuntimeHotspot.AnnualCraft, craftSample);
-		}
-		if (profile.RealmTier > XjRealmSuppression.TierNone
-			&& XjDetectionGate.IsEntityMaintenanceSlot(XjEntityDetectionJob.TalismanDistribution, actorId, annualYear))
-		{
-			long talismanSample = XjRuntimeDiagnostics.BeginSample(XjRuntimeHotspot.AnnualTalisman, 31);
-			XjTalismanDistributionSystem.TickActor(actor, annualYear);
-			XjRuntimeDiagnostics.EndSample(XjRuntimeHotspot.AnnualTalisman, talismanSample);
-		}
-
-		// 人生关系复用当前年度修士队列与宗门/城市增量索引。观察器内部五年分槽，
-		// 每人最多检查12名候选，不增加全世界扫描。
-		if (profile.RealmTier > XjRealmSuppression.TierNone)
-		{
-			long threeBookSocialSample = XjRuntimeDiagnostics.BeginSample(XjRuntimeHotspot.AnnualThreeBookSocial, 31);
-			XjThreeBookSocialObserver.TickActor(actor, annualYear);
-			XjRuntimeDiagnostics.EndSample(XjRuntimeHotspot.AnnualThreeBookSocial, threeBookSocialSample);
-		}
-
-		// Breakthrough may have changed the actor's execution profile. Only actors
-		// with an actual finalize concern consume the third annual queue stage.
-		long finalizeResolveSample = XjRuntimeDiagnostics.BeginSample(XjRuntimeHotspot.AnnualFinalizeResolve, 31);
-		bool needsFinalize = ResolveFinalizeProfile(actor, annualYear).NeedsFinalize;
-		XjRuntimeDiagnostics.EndSample(XjRuntimeHotspot.AnnualFinalizeResolve, finalizeResolveSample);
-		return needsFinalize;
+		// The scheduler commits the core cursor immediately after this stage. All
+		// family/sect/equipment and secondary yearly work is queued independently.
+		return false;
 	}
 
 	private static XjAnnualActorProfile ResolveProgressionProfile(Actor actor)
@@ -446,7 +436,7 @@ internal static class XjSchedulerActorPipeline
 		return new XjAnnualActorProfile(realmTier, realmId, interest);
 	}
 
-	private static XjAnnualActorProfile ResolveFinalizeProfile(Actor actor, int currentYear)
+	private static XjAnnualActorProfile ResolveFinalizeProfile(Actor actor, int fromYearInclusive, int currentYear)
 	{
 		if (actor?.data == null)
 		{
@@ -455,16 +445,12 @@ internal static class XjSchedulerActorPipeline
 
 		int realmTier = ResolveRealmTier(actor);
 		XjActorAccessor.TryGetString(actor, XjActorDataKeys.RealmId, out string realmId);
-		if (!string.IsNullOrWhiteSpace(realmId))
-		{
-			XjCultivationStateTransitions.EnsureDaoTuForRealm(actor, realmId, true);
-		}
 		XjAnnualInterest interest = XjAnnualInterest.None;
 		long actorId = ((BaseSystemData)actor.data).id;
 		bool needsPersonalZiFuLingBao = XjFaBaoForgePolicy.NeedsPersonalZiFuLingBao(actor);
 		if (realmTier >= XjRealmSuppression.TierZhuJi
 			&& (needsPersonalZiFuLingBao
-				|| (IsEquipmentMaintenanceDue(actorId, realmTier, currentYear)
+				|| (IsEquipmentMaintenanceDue(actorId, realmTier, fromYearInclusive, currentYear)
 					&& XjFaBaoEquipmentSync.HasAnnualInterest(actor))))
 		{
 			interest |= XjAnnualInterest.FaBao;
@@ -480,7 +466,8 @@ internal static class XjSchedulerActorPipeline
 		if (realmTier >= XjRealmSuppression.TierZiFu
 			|| (realmTier >= XjRealmSuppression.TierZhuJi
 				&& HasZongMenIdentity(actor)
-				&& XjDetectionGate.IsEntityMaintenanceSlot(XjEntityDetectionJob.SectIdentityRefresh, actorId, currentYear)))
+				&& XjDetectionGate.IsEntityMaintenanceDueBetween(
+					XjEntityDetectionJob.SectIdentityRefresh, actorId, fromYearInclusive, currentYear)))
 		{
 			interest |= XjAnnualInterest.ZongMen;
 		}
@@ -494,33 +481,7 @@ internal static class XjSchedulerActorPipeline
 
 	private static bool ShouldProcessQingXuan(Actor actor, in XjActorCultivationSnapshot snapshot)
 	{
-		if (actor?.data == null
-			|| !string.Equals(snapshot.RealmId, XjRealmIds.LianQi, StringComparison.Ordinal)
-			|| !string.Equals(snapshot.DaoTu, XjQingXuanKongZhengSystem.SourceDaoTu, StringComparison.Ordinal)
-			|| XjQingXuanKongZhengSystem.CanEnterQingXuan(actor))
-		{
-			return false;
-		}
-
-		if (XjActorAccessor.TryGetInt(actor, XjActorDataKeys.QingXuanQingCanQi, out int qingCanQi)
-			&& qingCanQi > 0)
-		{
-			return true;
-		}
-		if (XjActorAccessor.TryGetInt(actor, XjActorDataKeys.QingXuanChuYangJi, out int chuYangJi)
-			&& chuYangJi > 0)
-		{
-			return true;
-		}
-		if (XjActorAccessor.TryGetInt(actor, XjActorDataKeys.QingXuanXuanYangZiFoundation, out int foundation)
-			&& foundation > 0)
-		{
-			return true;
-		}
-
-		long actorId = ((BaseSystemData)actor.data).id;
-		return actorId > 0L
-			&& XjDeterministicHash.PositiveIndex(actorId, "qingxuan_entry_once", 1000) == 0;
+		return XjQingXuanKongZhengSystem.HasAnnualInterest(actor, snapshot.RealmId, snapshot.DaoTu);
 	}
 
 	private static bool ShouldProcessGongFa(
@@ -555,7 +516,7 @@ internal static class XjSchedulerActorPipeline
 			XjGongFaDefinition.MaxGrade,
 			Math.Min(
 				XjGongFaAptitudeRules.GetAptitudeGradeCap(actor, snapshot.XjZz),
-				ResolveGongFaRealmGradeCap(realmTier)));
+				XjGongFaAptitudeRules.GetRealmGradeCap(realmTier)));
 		if (maximumAllowedGrade <= grade)
 		{
 			return false;
@@ -572,19 +533,6 @@ internal static class XjSchedulerActorPipeline
 		}
 
 		return XjGongFaAttemptSchedule.IsDue(actor, nextGrade, currentYear);
-	}
-
-	private static int ResolveGongFaRealmGradeCap(int realmTier)
-	{
-		return realmTier switch
-		{
-			XjRealmSuppression.TierJinDan => 6,
-			XjRealmSuppression.TierZiFu => 6,
-			XjRealmSuppression.TierZhuJi => 5,
-			XjRealmSuppression.TierLianQi => 4,
-			XjRealmSuppression.TierTaiXi => 2,
-			_ => 1
-		};
 	}
 
 	private static bool ShouldProcessBreakthrough(in XjActorCultivationSnapshot snapshot)
@@ -609,19 +557,17 @@ internal static class XjSchedulerActorPipeline
 			: XjRealmSuppression.GetRealmTier(actor);
 	}
 
-	private static bool IsEquipmentMaintenanceDue(long actorId, int realmTier, int currentYear)
+	private static bool IsEquipmentMaintenanceDue(
+		long actorId,
+		int realmTier,
+		int fromYearInclusive,
+		int currentYear)
 	{
-		if (realmTier >= XjRealmSuppression.TierJinDan)
-		{
-			return true;
-		}
-
-		if (realmTier >= XjRealmSuppression.TierZiFu)
-		{
-			return XjDetectionGate.IsEntityMaintenanceSlot(XjEntityDetectionJob.ZiFuEquipmentMaintenance, actorId, currentYear);
-		}
-
-		return XjDetectionGate.IsEntityMaintenanceSlot(XjEntityDetectionJob.ZhuJiEquipmentMaintenance, actorId, currentYear);
+		if (realmTier >= XjRealmSuppression.TierJinDan) return true;
+		XjEntityDetectionJob job = realmTier >= XjRealmSuppression.TierZiFu
+			? XjEntityDetectionJob.ZiFuEquipmentMaintenance
+			: XjEntityDetectionJob.ZhuJiEquipmentMaintenance;
+		return XjDetectionGate.IsEntityMaintenanceDueBetween(job, actorId, fromYearInclusive, currentYear);
 	}
 
 	private static bool IsNearNaturalLifespan(Actor actor)
@@ -638,6 +584,68 @@ internal static class XjSchedulerActorPipeline
 	private static bool HasZongMenIdentity(Actor actor)
 	{
 		return XjSectRepository.ResolveActorSectId(actor) > 0L;
+	}
+
+	private static void RunSecondaryStep(long actorId, int annualYear, string label, Action action)
+	{
+		try
+		{
+			action?.Invoke();
+		}
+		catch (Exception ex)
+		{
+			UnityEngine.Debug.LogError(
+				"[玄鉴][年度次级车道] actor=" + actorId
+				+ " year=" + annualYear
+				+ " step=" + (label ?? string.Empty)
+				+ " ex=" + ex);
+		}
+	}
+
+	private static string ResolveRealmIdAtYear(Actor actor, int annualYear)
+	{
+		string currentRealmId = XjRealmHelper.GetUnifiedId(actor, XjRealmHelper.GetTraitSnapshotForRouter);
+		if (actor?.data == null || annualYear <= 0 || string.IsNullOrWhiteSpace(currentRealmId))
+		{
+			return currentRealmId ?? string.Empty;
+		}
+
+		// Once the requested logical year reaches the latest transition, the live
+		// realm is authoritative. Earlier years are reconstructed from persistent
+		// threshold timestamps so a lagging secondary lane cannot grant ZiFu/JinDan
+		// production before those prerequisites actually existed.
+		if (XjActorAccessor.TryGetInt(actor, XjActorDataKeys.RealmEnteredYear, out int currentEnteredYear)
+			&& currentEnteredYear > 0
+			&& annualYear >= currentEnteredYear)
+		{
+			return currentRealmId;
+		}
+
+		if (XjActorAccessor.TryGetInt(actor, XjActorDataKeys.XjShenDanYear, out int shenDanYear)
+			&& shenDanYear > 0 && annualYear >= shenDanYear)
+		{
+			return XjRealmIds.ShenDan;
+		}
+		if (XjActorAccessor.TryGetInt(actor, XjActorDataKeys.XjJinDanSuccessYear, out int jinDanYear)
+			&& jinDanYear > 0 && annualYear >= jinDanYear)
+		{
+			return XjRealmIds.JinDan;
+		}
+		int ziFuYear = XjCultivationStateTransitions.ReadZiFuEnteredYear(actor);
+		if (ziFuYear > 0 && annualYear >= ziFuYear)
+		{
+			return XjRealmIds.ZiFu;
+		}
+		int zhuJiYear = XjCultivationStateTransitions.ReadZhuJiEnteredYear(actor);
+		if (zhuJiYear > 0 && annualYear >= zhuJiYear)
+		{
+			return XjRealmIds.ZhuJi;
+		}
+
+		// Exact distinction below ZhuJi does not affect secondary production; use
+		// LianQi as the safe non-forging historical realm for an already-qualified
+		// cultivator whose older transition timestamp is unavailable.
+		return XjRealmIds.LianQi;
 	}
 
 	private static bool IsBoatLikeActor(Actor actor)
@@ -658,39 +666,117 @@ internal static class XjSchedulerActorPipeline
 			|| assetId.IndexOf("ship", StringComparison.OrdinalIgnoreCase) >= 0;
 	}
 
-	private static void ProcessFinalizeStage(Actor actor, int currentYear)
+	private static void ProcessMaintenanceIdentityStage(Actor actor, int fromYearInclusive, int currentYear)
 	{
-		XjAnnualActorProfile profile = ResolveFinalizeProfile(actor, currentYear);
+		long actorId = ((BaseSystemData)actor.data).id;
+		int realmTier = ResolveRealmTier(actor);
+		bool isZiFuOrAbove = realmTier >= XjRealmSuppression.TierZiFu;
+		bool isYaoXie = XjTrueDamageSystem.IsJinXingYaoXie(actor);
+
+		if (isZiFuOrAbove)
+		{
+			XjSectHighRealmResidenceSystem.Enforce(actor, currentYear);
+		}
+		if (!XjLongShuSystem.IsLongShu(actor))
+		{
+			if (isZiFuOrAbove)
+			{
+				bool hasConfirmedFamily = XjFamilyMemberIndex.Shared.TryGetRecord(actorId, out XjFamilyIdentity identity)
+					&& identity.Found
+					&& identity.FamilyStableIdValue > 0L;
+				if (!hasConfirmedFamily
+					|| XjFamilyMemberIndex.Shared.IsActorPending(actorId)
+					|| !actor.hasClan())
+				{
+					XjFamilyMemberIndex.Shared.EnsureHighRealmFamily(actor);
+				}
+			}
+			else if (XjDetectionGate.IsEntityMaintenanceDueBetween(
+				XjEntityDetectionJob.FamilyIdentityRepair, actorId, fromYearInclusive, currentYear)
+				&& !XjFamilyMemberIndex.Shared.TryGetRecord(actorId, out _)
+				&& !XjFamilyMemberIndex.Shared.IsActorPending(actorId))
+			{
+				XjFamilyMemberIndex.Shared.AddActorToFamily(actor);
+			}
+		}
+
+		if (isZiFuOrAbove
+			|| XjDetectionGate.IsEntityMaintenanceDueBetween(
+				XjEntityDetectionJob.FamilyBranchAndSurname, actorId, fromYearInclusive, currentYear))
+		{
+			if (XjFamilyMemberIndex.Shared.TryGetRecord(actorId, out XjFamilyIdentity maintenanceIdentity)
+				&& maintenanceIdentity.Found)
+			{
+				XjFamilyMemberIndex.Shared.ReconcileCityBranch(actor, currentYear);
+				XjFamilySurnamePolicy.EnsureForConfirmedActor(actor);
+			}
+		}
+		if (!isYaoXie && actor.hasTrait("madness"))
+		{
+			XjVisibleTraitSync.EnsureCultivatorNoMadness(actor);
+		}
+		if (isZiFuOrAbove
+			|| (realmTier >= XjRealmSuppression.TierZhuJi
+				&& HasZongMenIdentity(actor)
+				&& XjDetectionGate.IsEntityMaintenanceDueBetween(
+					XjEntityDetectionJob.SectCityObservation, actorId, fromYearInclusive, currentYear)))
+		{
+			XjZongMenCultivatorCityIndex.Observe(actor);
+		}
+		if (isZiFuOrAbove
+			&& XjDetectionGate.IsEntityMaintenanceDueBetween(
+				XjEntityDetectionJob.QiuJinWarehouseReconcile, actorId, fromYearInclusive, currentYear))
+		{
+			XjQiuJinFaWarehouseReconciler.ReconcileActor(actor, currentYear);
+		}
+	}
+
+	private static void ProcessMaintenanceAncillaryStage(Actor actor, int fromYearInclusive, int currentYear)
+	{
+		XjAnnualActorProfile profile = ResolveProgressionProfile(actor);
+		long actorId = ((BaseSystemData)actor.data).id;
+		if (profile.RealmTier > XjRealmSuppression.TierNone
+			&& XjDetectionGate.IsEntityMaintenanceDueBetween(
+				XjEntityDetectionJob.TalismanDistribution, actorId, fromYearInclusive, currentYear))
+		{
+			long talismanSample = XjRuntimeDiagnostics.BeginSample(XjRuntimeHotspot.AnnualTalisman, 31);
+			XjTalismanDistributionSystem.TickActor(actor, currentYear);
+			XjRuntimeDiagnostics.EndSample(XjRuntimeHotspot.AnnualTalisman, talismanSample);
+		}
+		if (profile.RealmTier > XjRealmSuppression.TierNone
+			&& XjDetectionGate.TryResolveLatestEntityMaintenanceYear(
+				XjEntityDetectionJob.ThreeBookSocialObservation,
+				actorId,
+				fromYearInclusive,
+				currentYear,
+				out int socialYear))
+		{
+			long socialSample = XjRuntimeDiagnostics.BeginSample(XjRuntimeHotspot.AnnualThreeBookSocial, 31);
+			XjThreeBookSocialObserver.TickActor(actor, socialYear);
+			XjRuntimeDiagnostics.EndSample(XjRuntimeHotspot.AnnualThreeBookSocial, socialSample);
+		}
+	}
+
+	private static void ProcessMaintenanceAssetsStage(Actor actor, int fromYearInclusive, int currentYear)
+	{
+		XjAnnualActorProfile profile = ResolveFinalizeProfile(actor, fromYearInclusive, currentYear);
 		if (profile.Has(XjAnnualInterest.FaBao))
 		{
 			XjEquipmentForgeConsumer.ReconcileManagedItemLimit(actor, profile.RealmId);
 			XjFaBaoEquipmentSync.TryBorrowFamilyFaBao(actor, profile.RealmId, currentYear);
 			XjFaBaoEquipmentSync.TryEnsureGeneratedEquipment(actor);
-			XjFaBaoAcquisition.TryForgeAnnualIfMissing(actor, profile.RealmId, currentYear);
-			XjEquipmentForgeConsumer.TryForgeAnnual(actor, profile.RealmId, currentYear);
 		}
-		if (profile.Has(XjAnnualInterest.LostFaBao))
-		{
-			ProcessLostFaBaoDiscovery(actor, currentYear);
-		}
-		if (profile.Has(XjAnnualInterest.AutoCollect))
-		{
-			XjAutoCollectSystem.TickActor(actor, profile.RealmId);
-		}
-		if (profile.Has(XjAnnualInterest.ZongMen))
-		{
-			ProcessZongMen(actor, profile.RealmId, currentYear);
-		}
+		if (profile.Has(XjAnnualInterest.AutoCollect)) XjAutoCollectSystem.TickActor(actor, profile.RealmId);
+		if (profile.Has(XjAnnualInterest.ZongMen)) ProcessZongMen(actor, profile.RealmId, fromYearInclusive, currentYear);
 		if (profile.Has(XjAnnualInterest.JinDan))
 		{
 			XjGuoWeiRegistry.ReconcileLiveActor(actor);
-			XjJinDanBreakthroughSystem.TickAnnualGift(actor);
 		}
 	}
 
 	private static bool ShouldAttemptLostFaBaoDiscovery(Actor actor, int currentYear)
 	{
-		if (!XjFamilyFaBaoWarehouse.HasLostEntries
+		if (!XjFamilyFaBaoWarehouse.HasLostEntriesAtOrBeforeYear(currentYear)
 			|| actor?.data == null
 			|| currentYear <= 0)
 		{
@@ -713,10 +799,12 @@ internal static class XjSchedulerActorPipeline
 	private static bool ProcessCultivationGrowth(Actor actor, in XjActorCultivationSnapshot snapshot, int currentYear)
 	{
 		float elapsedYears = ZhenYuanGainPerStep;
+		int previousYear = 0;
 		if (currentYear > 0)
 		{
 			if (XjActorAccessor.TryGetInt(actor, XjActorDataKeys.XjLastCultivationYear, out int lastYear))
 			{
+				previousYear = lastYear;
 				if (lastYear == currentYear)
 				{
 					return false;
@@ -736,6 +824,7 @@ internal static class XjSchedulerActorPipeline
 			XjActorAccessor.SetInt(actor, XjActorDataKeys.XjLastCultivationYear, currentYear);
 		}
 
+		XjStageZeroObservation.RecordCultivationGrowth(previousYear, currentYear, elapsedYears);
 		// 高倍速年度请求合并到最新年份；遗漏年份只聚合被动真元增长，
 		// 功法、瓶颈、丹药和突破仍只在当前年度执行一次，避免补算连跳境界。
 		XjCultivationLocalExecutor.RunValidatedLocalStep(actor, elapsedYears, snapshot);
@@ -921,8 +1010,13 @@ internal static class XjSchedulerActorPipeline
 		}
 
 		XjBreakthroughAttemptResult result = XjBreakthroughRules.Resolve(actor, snapshot, caiQiSnapshot, targetRule.RealmId);
-		if (!result.CanPromote
-			|| !XjCultivationStateTransitions.TrySetRealm(actor, targetRule.RealmId, true))
+		bool promoted = result.CanPromote
+			&& XjCultivationStateTransitions.TrySetRealm(actor, targetRule.RealmId, true);
+		XjStageZeroObservation.RecordBreakthroughResult(
+			targetRule.RealmId,
+			promoted ? result.ReasonCode : (result.CanPromote ? "RealmWriteRejected" : result.ReasonCode),
+			promoted);
+		if (!promoted)
 		{
 			return;
 		}
@@ -934,13 +1028,13 @@ internal static class XjSchedulerActorPipeline
 			syncVisibleTraits: false,
 			restoreHealth: false);
 
-		XjActorCultivationSnapshot postSnapshot = XjActorCultivationSnapshotBuilder.Build(actor);
+		XjActorCultivationSnapshot postSnapshot = XjActorCultivationSnapshotBuilder.BuildAnnualProgression(actor, ResolveRealmTier(actor));
 		string postDaoTu = postSnapshot.DaoTu;
 		if (string.IsNullOrWhiteSpace(postDaoTu)
 			|| !XjDaoTuVisibleTraitCatalog.TryResolveTraitId(postDaoTu.Trim(), out _))
 		{
 			XjFamilyDaoTuRules.TryEnsureCultivatorDaoTu(actor, out postDaoTu);
-			postSnapshot = XjActorCultivationSnapshotBuilder.Build(actor);
+			postSnapshot = XjActorCultivationSnapshotBuilder.BuildAnnualProgression(actor, ResolveRealmTier(actor));
 			postDaoTu = postSnapshot.DaoTu;
 		}
 		// 名称、可见境界与排行榜索引属于境界写入的强一致投影，
@@ -968,7 +1062,7 @@ internal static class XjSchedulerActorPipeline
 			{
 				XjFamilyDaoTuRules.TryEnsureCultivatorDaoTu(actor, out postDaoTu);
 			}
-			postSnapshot = XjActorCultivationSnapshotBuilder.Build(actor);
+			postSnapshot = XjActorCultivationSnapshotBuilder.BuildAnnualProgression(actor, ResolveRealmTier(actor));
 			postDaoTu = postSnapshot.DaoTu;
 			XjGongFaProgression.EnsureEntryGongFa(actor, postSnapshot);
 		}
@@ -978,7 +1072,7 @@ internal static class XjSchedulerActorPipeline
 			// 旧档或跨版本角色可能在筑基阶段漏写了首门仙基。紫府公告前
 			// 只按真实功法映射补写，失败则不发布带“未知”占位的公告。
 			XjZiFuProgression.EnsureZhuJiFoundationXianJi(actor, postDaoTu, currentYear);
-			postSnapshot = XjActorCultivationSnapshotBuilder.Build(actor);
+			postSnapshot = XjActorCultivationSnapshotBuilder.BuildAnnualProgression(actor, ResolveRealmTier(actor));
 			postDaoTu = postSnapshot.DaoTu;
 		}
 
@@ -1024,7 +1118,7 @@ internal static class XjSchedulerActorPipeline
 			|| string.Equals(targetRealmId, XjRealmIds.ZiFu, StringComparison.Ordinal);
 	}
 
-	private static void ProcessZongMen(Actor actor, string realmId, int currentYear)
+	private static void ProcessZongMen(Actor actor, string realmId, int fromYearInclusive, int currentYear)
 	{
 		if (XjLongShuSystem.IsExcludedFromInheritance(actor))
 		{
@@ -1072,7 +1166,8 @@ internal static class XjSchedulerActorPipeline
 		// 立即写入。紫府、金丹保留每年同步，避免宗门核心资产滞后。
 		long actorId = ((BaseSystemData)actor.data).id;
 		bool needsWarehouseReconcile = !string.Equals(realmId, XjRealmIds.ZhuJi, StringComparison.Ordinal)
-			|| XjDetectionGate.IsEntityMaintenanceSlot(XjEntityDetectionJob.SectWarehouseReconcile, actorId, currentYear);
+			|| XjDetectionGate.IsEntityMaintenanceDueBetween(
+				XjEntityDetectionJob.SectWarehouseReconcile, actorId, fromYearInclusive, currentYear);
 		if (needsWarehouseReconcile)
 		{
 			XjGongFaWarehouseReconciler.ReconcileActor(actor, currentYear);

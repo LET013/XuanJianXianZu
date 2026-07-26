@@ -13,6 +13,8 @@ using XuanJianVNext.Systems.QianKunDai;
 using XuanJianVNext.Systems.Family;
 using XuanJianVNext.Systems.LongShu;
 
+using XuanJianVNext.Systems.Runtime;
+
 namespace XuanJianVNext.Systems.HighRealm;
 
 internal readonly struct XjQiuJinFaState
@@ -139,6 +141,9 @@ internal static class XjQiuJinFaAccessor
 		XjActorAccessor.SetString(actor, XjActorDataKeys.XjQiuJinFaOrigin, reason ?? string.Empty);
 		XjActorAccessor.SetInt(actor, XjActorDataKeys.XjQiuJinFaReady, 0);
 		XjActorAccessor.SetInt(actor, XjActorDataKeys.XjQiuJinFaLastYear, 0);
+		XjActorAccessor.SetInt(actor, XjActorDataKeys.XjQiuJinFaLastExecutionYear, 0);
+		XjActorAccessor.SetInt(actor, XjActorDataKeys.XjQiuJinFaEligibilityYear, 0);
+		XjActorAccessor.SetInt(actor, XjActorDataKeys.XjQiuJinFaLastLogicalAttemptYear, 0);
 		XjActorAccessor.SetInt(actor, XjActorDataKeys.XjQiuJinFaFailureCount, 0);
 		XjActorAccessor.SetString(actor, XjActorDataKeys.XjQiuJinFaLastFailureReason, string.Empty);
 	}
@@ -358,6 +363,27 @@ internal static class XjQiuJinFaSystem
 {
 	private const int AttemptIntervalYears = 5;
 
+	internal static void ActivateEligibility(Actor actor, int executionYear)
+	{
+		if (actor?.data == null) return;
+		int safeYear = Math.Max(1, executionYear);
+		long due = (long)safeYear + AttemptIntervalYears;
+		XjActorAccessor.SetInt(
+			actor,
+			XjActorDataKeys.XjQiuJinFaEligibilityYear,
+			due > int.MaxValue ? int.MaxValue : (int)due);
+		XjActorAccessor.SetInt(actor, XjActorDataKeys.XjQiuJinFaLastLogicalAttemptYear, 0);
+		XjActorAccessor.SetInt(actor, XjActorDataKeys.XjQiuJinFaLastExecutionYear, 0);
+	}
+
+	internal static void ResetEligibility(Actor actor)
+	{
+		if (actor?.data == null) return;
+		XjActorAccessor.SetInt(actor, XjActorDataKeys.XjQiuJinFaEligibilityYear, 0);
+		XjActorAccessor.SetInt(actor, XjActorDataKeys.XjQiuJinFaLastLogicalAttemptYear, 0);
+		XjActorAccessor.SetInt(actor, XjActorDataKeys.XjQiuJinFaLastExecutionYear, 0);
+	}
+
 	internal static void TickActor(Actor actor, XjActorCultivationSnapshot snapshot)
 	{
 		if (actor?.data == null
@@ -393,16 +419,17 @@ internal static class XjQiuJinFaSystem
 		}
 
 		int currentYear = GetCurrentYear(actor);
-		// 第五神通完成后必须再经历完整的五年求金法周期。
-		// XjQiuJinFaLastYear 尚未写入时，以最后一门神通的获得年份作为基准，
-		// 避免同一年度在高境管线中连续完成第五神通并立刻尝试求金法。
-		int attemptBaselineYear = qiuJinFa.LastYear;
-		if (attemptBaselineYear <= 0)
-		{
-			XjXianJiState xianJiState = XjXianJiAccessor.BuildState(actor);
-			attemptBaselineYear = xianJiState.LastYear;
-		}
-		if (attemptBaselineYear > 0 && currentYear < attemptBaselineYear + AttemptIntervalYears)
+		// 第五神通完成后必须再经历完整的五年求金法周期。资格激活年
+		// 与逻辑失败机会分开保存，旧神通阶段的债务不能带入求金法。
+		int eligibilityYear = EnsureEligibility(actor, currentYear);
+		XjActorAccessor.TryGetInt(
+			actor,
+			XjActorDataKeys.XjQiuJinFaLastLogicalAttemptYear,
+			out int lastLogicalAttemptYear);
+		if (!XjProgressionOpportunityClock.TryResolveIntervalDueYear(
+				lastLogicalAttemptYear, AttemptIntervalYears, eligibilityYear, currentYear, out int opportunityYear)
+			|| !XjProgressionOpportunityClock.HasExecutionSlot(
+				actor, XjActorDataKeys.XjQiuJinFaLastExecutionYear, currentYear))
 		{
 			return;
 		}
@@ -411,7 +438,10 @@ internal static class XjQiuJinFaSystem
 			return;
 		}
 
-		XjQiuJinFaAccessor.SetLastYear(actor, currentYear);
+		XjProgressionOpportunityClock.MarkExecuted(
+			actor, XjActorDataKeys.XjQiuJinFaLastExecutionYear, currentYear);
+		XjStageZeroObservation.RecordOpportunityDebtConsumed("QiuJinFa", opportunityYear, currentYear);
+		XjActorAccessor.SetInt(actor, XjActorDataKeys.XjQiuJinFaLastLogicalAttemptYear, opportunityYear);
 		XjActorAccessor.TryGetInt(actor, XjActorDataKeys.XjQiuJinFaFailureCount, out int existingFailureCount);
 		try
 		{
@@ -424,11 +454,12 @@ internal static class XjQiuJinFaSystem
 		XjQiuJinFaState borrowed = XjQiuJinFaAccessor.BuildState(actor);
 		if (borrowed.Found && borrowed.Ready)
 		{
+			XjQiuJinFaAccessor.SetLastYear(actor, currentYear);
 			PublishQiuJinFaSuccess(actor, borrowed);
 			return;
 		}
 
-		if (!ShouldSucceed(actor, snapshot, gongFa, currentYear, existingFailureCount))
+		if (!ShouldSucceed(actor, snapshot, gongFa, opportunityYear, existingFailureCount))
 		{
 			int nextFailureCount = existingFailureCount + 1;
 			XjActorAccessor.SetInt(actor, XjActorDataKeys.XjQiuJinFaFailureCount, nextFailureCount);
@@ -461,12 +492,25 @@ internal static class XjQiuJinFaSystem
 			0,
 			daoTu,
 			true,
-			currentYear,
+				currentYear,
 			"QiuJinFaComprehended",
 			boundAuthority);
 		XjQiuJinFaAccessor.WriteState(actor, newQiuJinFa);
 		XjActorAccessor.SetString(actor, XjActorDataKeys.XjQiuJinFaLastFailureReason, string.Empty);
 		PublishQiuJinFaSuccess(actor, newQiuJinFa);
+	}
+
+	private static int EnsureEligibility(Actor actor, int currentYear)
+	{
+		if (!XjActorAccessor.TryGetInt(actor, XjActorDataKeys.XjQiuJinFaEligibilityYear, out int eligibilityYear)
+			|| eligibilityYear <= 0)
+		{
+			// Legacy stage1-5 saves cannot prove the real fifth-XianJi acquisition
+			// year because it was overwritten by logical attempts. Reset once now.
+			ActivateEligibility(actor, Math.Max(1, currentYear));
+			XjActorAccessor.TryGetInt(actor, XjActorDataKeys.XjQiuJinFaEligibilityYear, out eligibilityYear);
+		}
+		return eligibilityYear;
 	}
 
 	private static bool HasFiveGrade5GongFa(Actor actor)
@@ -625,6 +669,8 @@ internal static class XjQiuJinBoundGongFaPromotion
 			XjQiuJinFaSystem.PublishQiuJinFaSuccess(actor, qiuJinFa);
 		}
 
+		// 六品真实调用链原本就是每个世界年最多尝试一次。这里保留原频率，
+		// 不套用未接入实际路径的五年检测枚举，避免阶段1改变平衡。
 		XjActorAccessor.TryGetInt(actor, XjActorDataKeys.XjGongFaHighPromotionLastYear, out int lastAttemptYear);
 		if (lastAttemptYear >= currentYear)
 		{
@@ -635,6 +681,7 @@ internal static class XjQiuJinBoundGongFaPromotion
 		XjActorAccessor.TryGetInt(actor, XjActorDataKeys.XjGongFaHighPromotionFailureCount, out int existingFailureCount);
 		if (XjFamilyHighGradeTransmission.TryBorrowGrade6(actor, snapshot, gongFa))
 		{
+			XjStageZeroObservation.RecordGongFaAttempt(6, true);
 			return;
 		}
 
@@ -643,6 +690,7 @@ internal static class XjQiuJinBoundGongFaPromotion
 			int nextFailureCount = existingFailureCount + 1;
 			XjActorAccessor.SetInt(actor, XjActorDataKeys.XjGongFaHighPromotionFailureCount, nextFailureCount);
 			XjActorAccessor.SetString(actor, XjActorDataKeys.XjGongFaHighPromotionLastFailureReason, "六品未契");
+			XjStageZeroObservation.RecordGongFaAttempt(6, false);
 			return;
 		}
 
@@ -670,12 +718,14 @@ internal static class XjQiuJinBoundGongFaPromotion
 			"求金法贯通"))
 		{
 			XjActorAccessor.SetString(actor, XjActorDataKeys.XjGongFaHighPromotionLastFailureReason, "五品功法写入失败");
+			XjStageZeroObservation.RecordGongFaAttempt(6, false);
 			return;
 		}
 		XjGongFaAccessor.WriteState(actor, promoted);
 		XjGongFaAccessor.WriteSource(actor, "求金法贯通");
 		XjActorAccessor.SetInt(actor, XjActorDataKeys.XjGongFaHighPromotionFailureCount, 0);
 		XjActorAccessor.SetString(actor, XjActorDataKeys.XjGongFaHighPromotionLastFailureReason, string.Empty);
+		XjStageZeroObservation.RecordGongFaAttempt(6, true);
 		XjGongFaProgression.PublishGongFaPromoted(actor, promoted);
 	}
 

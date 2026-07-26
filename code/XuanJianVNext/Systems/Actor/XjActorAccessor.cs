@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Reflection;
 using XuanJianVNext.Data.Rules;
+using XuanJianVNext.Core;
 
 namespace XuanJianVNext.Systems.ActorSystem;
 
@@ -26,6 +27,7 @@ internal static class XjActorAccessor
 		if (CanUse(actor, key))
 		{
 			((BaseSystemData)actor.data).set(key, value ?? string.Empty);
+			XjCultivatorCandidateIndex.NotifyActorDataChanged(actor, key);
 		}
 	}
 
@@ -46,6 +48,7 @@ internal static class XjActorAccessor
 		if (CanUse(actor, key))
 		{
 			((BaseSystemData)actor.data).set(key, value);
+			XjCultivatorCandidateIndex.NotifyActorDataChanged(actor, key);
 		}
 	}
 
@@ -66,6 +69,7 @@ internal static class XjActorAccessor
 		if (CanUse(actor, key))
 		{
 			((BaseSystemData)actor.data).set(key, value);
+			XjCultivatorCandidateIndex.NotifyActorDataChanged(actor, key);
 		}
 	}
 
@@ -94,6 +98,7 @@ internal static class XjActorAccessor
 		if (CanUse(actor, key))
 		{
 			((BaseSystemData)actor.data).set(key, value);
+			XjCultivatorCandidateIndex.NotifyActorDataChanged(actor, key);
 		}
 	}
 
@@ -177,11 +182,18 @@ internal static class XjActorAccessor
 			|| key == XjActorDataKeys.XjGongFaProgress
 			|| key == XjActorDataKeys.XjGongFaDaoTu
 			|| key == XjActorDataKeys.XjGongFaSource
+			|| key == XjActorDataKeys.XjGongFaClockTargetGrade
+			|| key == XjActorDataKeys.XjGongFaClockEligibilityYear
+			|| key == XjActorDataKeys.XjGongFaGrade4NextAttemptYear
+			|| key == XjActorDataKeys.XjGongFaGrade5NextAttemptYear
 			|| key == XjActorDataKeys.XjGongFaCollectionVersion
 			|| key == XjActorDataKeys.XjGongFaCollectionJson
 			|| key == XjActorDataKeys.XjXianJiCount
 			|| key == XjActorDataKeys.XjXianJiIds
 			|| key == XjActorDataKeys.XjXianJiLastYear
+			|| key == XjActorDataKeys.XjXianJiClockTargetCount
+			|| key == XjActorDataKeys.XjXianJiClockEligibilityYear
+			|| key == XjActorDataKeys.XjXianJiLastLogicalAttemptYear
 			|| key == XjActorDataKeys.XjXianJiFailureCount
 			|| key == XjActorDataKeys.XjXianJiProjectId
 			|| key == XjActorDataKeys.XjXianJiProjectTargetCount
@@ -197,6 +209,8 @@ internal static class XjActorAccessor
 			|| key == XjActorDataKeys.XjQiuJinFaSourceDaoTu
 			|| key == XjActorDataKeys.XjQiuJinFaReady
 			|| key == XjActorDataKeys.XjQiuJinFaLastYear
+			|| key == XjActorDataKeys.XjQiuJinFaEligibilityYear
+			|| key == XjActorDataKeys.XjQiuJinFaLastLogicalAttemptYear
 			|| key == XjActorDataKeys.XjQiuJinFaFailureCount
 			|| key == XjActorDataKeys.XjQiuJinFaLastFailureReason
 			|| key == XjActorDataKeys.XjGongFaGrade5PromotionFailureCount

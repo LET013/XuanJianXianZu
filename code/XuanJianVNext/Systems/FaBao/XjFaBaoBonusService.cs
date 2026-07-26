@@ -155,15 +155,12 @@ internal static class XjFaBaoBonusService
 
 	private static string BuildCombinedProfileSignature(Actor actor, in XjFaBaoState state)
 	{
-		System.Text.StringBuilder builder = new System.Text.StringBuilder(256);
+		System.Text.StringBuilder builder = null;
 		if (state.Found)
 		{
+			builder = new System.Text.StringBuilder(256);
 			builder.Append(state.Id).Append('|').Append(state.ClassName).Append('|').Append(state.Kind)
 				.Append('|').Append(state.Role).Append('|').Append(state.Affixes);
-		}
-		else
-		{
-			builder.Append(NoFaBaoSignature);
 		}
 
 		if (actor?.equipment != null)
@@ -175,9 +172,20 @@ internal static class XjFaBaoBonusService
 				{
 					continue;
 				}
+				if (builder == null)
+				{
+					builder = new System.Text.StringBuilder(256);
+					builder.Append(NoFaBaoSignature);
+				}
 				builder.Append("||").Append(itemState.Id).Append('|').Append(itemState.ClassName)
 					.Append('|').Append(itemState.Role).Append('|').Append(itemState.Affixes);
 			}
+		}
+
+		if (builder == null)
+		{
+			XjStageZeroObservation.RecordNoFaBaoSignatureFastPath();
+			return NoFaBaoSignature;
 		}
 		return builder.ToString();
 	}

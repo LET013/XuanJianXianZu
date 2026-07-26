@@ -141,14 +141,17 @@ internal static partial class XjJinDanBreakthroughSystem
 		bool daoZhu = actor.hasTrait("ChuShen8");
 		float triggerChance = daoZhu ? 1f : CalculateTriggerChance(actor, snapshot);
 		XjActorAccessor.SetInt(actor, XjActorDataKeys.XjJinDanLastAttemptYear, currentYear);
+		XjStageZeroObservation.RecordJinDanAttemptStarted();
 		if (PositiveRollBasisPoints(actorId, currentYear, "jindan_trigger") >= (int)(triggerChance * 10000f))
 		{
+			XjStageZeroObservation.RecordJinDanResult("TriggerMiss", false);
 			return;
 		}
 
 		XjXianJiState xianJiState = XjXianJiAccessor.BuildState(actor);
 		if (HasCrossDaoTuXianJi(actor, snapshot.DaoTu))
 		{
+			XjStageZeroObservation.RecordJinDanResult("CrossDaoTuSpell", false);
 			ResolveForcedDeathFailure(actor, currentYear, "CrossDaoTuSpell");
 			return;
 		}
@@ -199,6 +202,7 @@ internal static partial class XjJinDanBreakthroughSystem
 				XjActorAccessor.SetString(actor, XjActorDataKeys.XjJinDanFailureNarrative,
 					BuildZhengWeiSchemerFailureNarrative(actor, schemer));
 			}
+			XjStageZeroObservation.RecordJinDanResult("BreakthroughFailed", false);
 			ResolveAttemptFailure(actor, snapshot, xianJiState, currentYear, "BreakthroughFailed");
 			return;
 		}
@@ -207,6 +211,7 @@ internal static partial class XjJinDanBreakthroughSystem
 		// 出现在原本应当通过的成丹尝试中，不能把普通失败伪装成道胎之劫。
 		if (XjJinDanDaoTaiInterception.TryResolve(actor, candidateJinDanDaoTu, currentYear))
 		{
+			XjStageZeroObservation.RecordJinDanResult("DaoTaiInterception", false);
 			return;
 		}
 
@@ -216,6 +221,7 @@ internal static partial class XjJinDanBreakthroughSystem
 		string guoWeiType = candidateGuoWeiType;
 		if (string.Equals(guoWeiType, XjGuoWeiCalculator.NoDoor, StringComparison.Ordinal))
 		{
+			XjStageZeroObservation.RecordJinDanResult("NoGuoWei", false);
 			ResolveAttemptFailure(actor, snapshot, xianJiState, currentYear, "NoGuoWei");
 			return;
 		}
@@ -228,6 +234,7 @@ internal static partial class XjJinDanBreakthroughSystem
 		}
 		if (HasCrossDaoTuXianJi(actor, jinDanDaoTu))
 		{
+			XjStageZeroObservation.RecordJinDanResult("CrossDaoTuSpell", false);
 			ResolveForcedDeathFailure(actor, currentYear, "CrossDaoTuSpell");
 			return;
 		}
@@ -260,6 +267,7 @@ internal static partial class XjJinDanBreakthroughSystem
 					return;
 				}
 				// 果位确有主人但神丹挂靠容量已满：恢复0.5.4的二次失败判定。
+				XjStageZeroObservation.RecordJinDanResult("ShenDanCapacityFull", false);
 				ResolveAttemptFailure(actor, snapshot, xianJiState, currentYear, "ShenDanCapacityFull");
 				return;
 			}
@@ -277,6 +285,7 @@ internal static partial class XjJinDanBreakthroughSystem
 			}
 			if (XjGuoWeiRegistry.TryFindActiveAnchor(jinDanDaoTu, guoWeiType, out _))
 			{
+				XjStageZeroObservation.RecordJinDanResult("ShenDanCapacityFull", false);
 				ResolveAttemptFailure(actor, snapshot, xianJiState, currentYear, "ShenDanCapacityFull");
 				return;
 			}
@@ -288,11 +297,13 @@ internal static partial class XjJinDanBreakthroughSystem
 		// 先写道途、后写境界，避免境界已成金丹而道途写入失败的半提交状态。
 		if (!XjCultivationStateTransitions.TrySetDaoTu(actor, jinDanDaoTu, false))
 		{
+			XjStageZeroObservation.RecordJinDanResult("DaoTuWriteRejected", false);
 			XjGuoWeiRegistry.ReleaseForActor(actorId, guoWei);
 			return;
 		}
 		if (!XjCultivationStateTransitions.TrySetRealm(actor, XjRealmIds.JinDan, false))
 		{
+			XjStageZeroObservation.RecordJinDanResult("RealmWriteRejected", false);
 			RestoreDaoTuAfterFailedPromotion(actor, originalDaoTu);
 			XjGuoWeiRegistry.ReleaseForActor(actorId, guoWei);
 			return;
@@ -301,6 +312,7 @@ internal static partial class XjJinDanBreakthroughSystem
 		XjJinDanAccessor.WriteSuccess(actor, jinXing, guoWei, currentYear);
 		if (!XjJinDanAccessor.BuildState(actor).Found)
 		{
+			XjStageZeroObservation.RecordJinDanResult("SuccessStateWriteFailed", false);
 			XjCultivationStateTransitions.TrySetRealm(actor, XjRealmIds.ZiFu, false);
 			RestoreDaoTuAfterFailedPromotion(actor, originalDaoTu);
 			XjGuoWeiRegistry.ReleaseForActor(actorId, guoWei);
@@ -316,6 +328,7 @@ internal static partial class XjJinDanBreakthroughSystem
 			XjGuoWeiQuanBingLifecycle.InitializeOnJinDan(actor, jinDanDaoTu, guoWei, currentYear));
 		RunJinDanSuccessStep("HighGradeTransmission", () =>
 			XjFamilyHighGradeTransmission.RecordJinDanGongFaSet(actor, jinDanDaoTu, gongFa, qiuJinFa, xianJiState, currentYear));
+		XjStageZeroObservation.RecordJinDanResult("JinDanSuccess", true);
 		RunJinDanSuccessEventChain(actor, jinDanDaoTu, jinXing, guoWei, currentYear, new XjActorCultivationSnapshot(
 			snapshot.RealmId,
 			jinDanDaoTu,
@@ -334,10 +347,12 @@ internal static partial class XjJinDanBreakthroughSystem
 		{
 			return;
 		}
+		string normalizedReason = (reason ?? string.Empty).Trim();
+		XjStageZeroObservation.RecordJinDanResult("Deferred:" + normalizedReason, false);
 		XjActorAccessor.SetString(
 			actor,
 			XjActorDataKeys.XjJinDanDeferredReason,
-			(reason ?? string.Empty).Trim());
+			normalizedReason);
 	}
 
 	private static void ResolveAttemptFailure(

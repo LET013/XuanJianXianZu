@@ -25,6 +25,7 @@ internal static class XjActorDataKeys
 	public const string ChuShenSpecialManualRemoved = "xuanjian.vnext.chushen.special_manual_removed";
 	public const string RealmId = "RealmId";
 	public const string RealmEnteredYear = "xuanjian.vnext.realm.entered_year";
+	public const string XjZhuJiEnteredYear = "xuanjian.vnext.realm.zhuji_entered_year";
 	public const string XjZiFuEnteredYear = "xuanjian.vnext.realm.zifu_entered_year";
 	public const string RealmManualRemoved = "xuanjian.vnext.realm.manual_removed";
 	public const string RealmBreakthroughLastAttemptYear = "xuanjian.vnext.realm.breakthrough.last_attempt_year";
@@ -73,11 +74,20 @@ internal static class XjActorDataKeys
 	public const string XjGongFaDaoTu = "xuanjian.vnext.gongfa.daotu";
 	public const string XjGongFaSource = "xuanjian.vnext.gongfa.source";
 	public const string XjGongFaLastProgressionYear = "xuanjian.vnext.gongfa.last_progression_year";
+	public const string XjGongFaLastExecutionYear = "xuanjian.vnext.gongfa.last_execution_year";
+	public const string XjGongFaClockTargetGrade = "xuanjian.vnext.gongfa.clock.target_grade";
+	public const string XjGongFaClockEligibilityYear = "xuanjian.vnext.gongfa.clock.eligibility_year";
+	public const string XjGongFaGrade4NextAttemptYear = "xuanjian.vnext.gongfa.grade4.next_attempt_year";
+	public const string XjGongFaGrade5NextAttemptYear = "xuanjian.vnext.gongfa.grade5.next_attempt_year";
 	public const string XjGongFaCollectionVersion = "xuanjian.vnext.gongfa.collection.version";
 	public const string XjGongFaCollectionJson = "xuanjian.vnext.gongfa.collection.json";
 	public const string XjXianJiCount = "xuanjian.vnext.xianji.count";
 	public const string XjXianJiIds = "xuanjian.vnext.xianji.ids";
 	public const string XjXianJiLastYear = "xuanjian.vnext.xianji.last_year";
+	public const string XjXianJiLastExecutionYear = "xuanjian.vnext.xianji.last_execution_year";
+	public const string XjXianJiClockTargetCount = "xuanjian.vnext.xianji.clock.target_count";
+	public const string XjXianJiClockEligibilityYear = "xuanjian.vnext.xianji.clock.eligibility_year";
+	public const string XjXianJiLastLogicalAttemptYear = "xuanjian.vnext.xianji.last_logical_attempt_year";
 	public const string XjXianJiFailureCount = "xuanjian.vnext.xianji.failure_count";
 	public const string XjXianJiProjectId = "xuanjian.vnext.xianji.project.id";
 	public const string XjXianJiProjectTargetCount = "xuanjian.vnext.xianji.project.target_count";
@@ -94,6 +104,9 @@ internal static class XjActorDataKeys
 	public const string XjQiuJinFaOrigin = "xuanjian.vnext.qiujinfa.origin";
 	public const string XjQiuJinFaReady = "xuanjian.vnext.qiujinfa.ready";
 	public const string XjQiuJinFaLastYear = "xuanjian.vnext.qiujinfa.last_year";
+	public const string XjQiuJinFaLastExecutionYear = "xuanjian.vnext.qiujinfa.last_execution_year";
+	public const string XjQiuJinFaEligibilityYear = "xuanjian.vnext.qiujinfa.eligibility_year";
+	public const string XjQiuJinFaLastLogicalAttemptYear = "xuanjian.vnext.qiujinfa.last_logical_attempt_year";
 	public const string XjQiuJinFaFailureCount = "xuanjian.vnext.qiujinfa.failure_count";
 	public const string XjQiuJinFaLastFailureReason = "xuanjian.vnext.qiujinfa.last_failure_reason";
 	public const string XjGongFaGrade5PromotionFailureCount = "xuanjian.vnext.gongfa.grade5_promotion.failure_count";
@@ -112,6 +125,8 @@ internal static class XjActorDataKeys
 	public const string XjJinDanDeferredReason = "xuanjian.vnext.jindan.deferred_reason";
 	public const string XjJinDanLastAttemptYear = "xuanjian.vnext.jindan.last_attempt_year";
 	public const string XjJinDanSuccessYear = "xuanjian.vnext.jindan.success_year";
+	public const string XjZiFuLingWuNextOpportunityYear = "xuanjian.vnext.zifu_lingwu.next_opportunity_year";
+	public const string XjZiFuLingWuLastExecutionYear = "xuanjian.vnext.zifu_lingwu.last_execution_year";
 	public const string XjJinDanSuccessEventYear = "xuanjian.vnext.jindan.success_event_year";
 	public const string XjJinDanSuccessEventSchema = "xuanjian.vnext.jindan.success_event_schema";
 	public const string XjJinDanYiXiang = "xuanjian.vnext.jindan.yixiang";
@@ -183,6 +198,7 @@ internal static class XjActorDataKeys
 	public const string XjWeaponArtProficiency = "xuanjian.vnext.weapon_art.proficiency";
 	public const string XjWeaponArtFailureCount = "xuanjian.vnext.weapon_art.failure_count";
 	public const string XjWeaponArtLastAnnualYear = "xuanjian.vnext.weapon_art.last_annual_year";
+	public const string XjWeaponArtActivatedYear = "xuanjian.vnext.weapon_art.activated_year";
 	public const string XjWeaponArtLastInsightYear = "xuanjian.vnext.weapon_art.last_insight_year";
 	public const string XjWeaponArtIntentYear = "xuanjian.vnext.weapon_art.intent_year";
 	public const string XjWeaponArtIntentSource = "xuanjian.vnext.weapon_art.intent_source";
@@ -193,6 +209,7 @@ internal static class XjActorDataKeys
 	public const string XjWeaponArtManualId = "xuanjian.vnext.weapon_art.manual.id";
 	public const string XjWeaponArtManualName = "xuanjian.vnext.weapon_art.manual.name";
 	public const string XjWeaponArtManualGrade = "xuanjian.vnext.weapon_art.manual.grade";
+	public const string XjCraftActivatedYear = "xuanjian.vnext.craft.activated_year";
 	public const string XjCraftAlchemyRank = "xuanjian.vnext.craft.alchemy.rank";
 	public const string XjCraftRankSchema = "xuanjian.vnext.craft.rank.schema";
 	public const string XjCraftRankFailureCount = "xuanjian.vnext.craft.rank.failure_count";
@@ -301,4 +318,12 @@ internal static class XjActorDataKeys
 	public const string XjAnnualLatestRequestedYear = "xuanjian.vnext.annual.latest_requested_year";
 	public const string XjAnnualStage = "xuanjian.vnext.annual.stage";
 	public const string XjAnnualLastCompletedYear = "xuanjian.vnext.annual.last_completed_year";
+	public const string XjAnnualSecondaryActiveYear = "xuanjian.vnext.annual.secondary.active_year";
+	public const string XjAnnualSecondaryLatestRequestedYear = "xuanjian.vnext.annual.secondary.latest_requested_year";
+	public const string XjAnnualSecondaryLastCompletedYear = "xuanjian.vnext.annual.secondary.last_completed_year";
+	public const string XjAnnualMaintenanceFromYear = "xuanjian.vnext.annual.maintenance_from_year";
+	public const string XjAnnualMaintenanceActiveYear = "xuanjian.vnext.annual.maintenance_active_year";
+	public const string XjAnnualMaintenanceLatestRequestedYear = "xuanjian.vnext.annual.maintenance_latest_requested_year";
+	public const string XjAnnualMaintenanceStage = "xuanjian.vnext.annual.maintenance_stage";
+	public const string XjAnnualMaintenanceLastCompletedYear = "xuanjian.vnext.annual.maintenance_last_completed_year";
 }

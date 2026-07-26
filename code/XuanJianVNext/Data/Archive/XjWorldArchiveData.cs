@@ -14,7 +14,7 @@ namespace XuanJianVNext.Data.Archive;
 
 internal sealed class XjWorldArchiveData
 {
-	public int Version { get; set; } = 108;
+	public int Version { get; set; } = 109;
 
 	public List<XjWorldArchiveChronicleRecord> FamilyChronicles { get; set; } = new List<XjWorldArchiveChronicleRecord>();
 
@@ -131,6 +131,23 @@ internal sealed class XjWorldArchiveData
 	public XjAlchemyArchiveBundle Alchemy { get; set; } = new XjAlchemyArchiveBundle();
 
 	public XjCraftArchiveBundle Craft { get; set; } = new XjCraftArchiveBundle();
+
+	public XjLongRunEcologyArchiveData LongRunEcology { get; set; } = new XjLongRunEcologyArchiveData();
+}
+
+internal sealed class XjLongRunEcologyArchiveData
+{
+	public bool Initialized { get; set; }
+	public int FirstCensusYear { get; set; }
+	public int PreviousCensusYear { get; set; }
+	public int PreviousHighRealmTotal { get; set; }
+	public int PreviousZiFuOrAbove { get; set; }
+	public int LastZiFuPromotionYear { get; set; }
+	public int LastJinDanPromotionYear { get; set; }
+	public int LastShenDanPromotionYear { get; set; }
+	public long CumulativeZiFuPromotions { get; set; }
+	public long CumulativeJinDanPromotions { get; set; }
+	public long CumulativeShenDanPromotions { get; set; }
 }
 
 internal sealed class XjWorldArchiveQuanBingStruggleState

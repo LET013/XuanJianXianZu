@@ -66,16 +66,43 @@ internal static class XjCultivationStateTransitions
 			|| (string.Equals(previousRealmId, XjRealmIds.ShenDan, StringComparison.Ordinal)
 				&& string.Equals(realmId, XjRealmIds.JinDan, StringComparison.Ordinal));
 		XjActorAccessor.SetString(actor, XjActorDataKeys.RealmId, realmId);
+		int transitionYear = 0;
 		if (realmChanged)
 		{
 			// 先切断旧境界瓶颈储备，再写入新境界年份。
 			// 否则旧档或特殊资质可能把炼气/筑基蓄积真元无上限释放到下一境界。
 			XjBottleneckEventSystem.ResetForRealmTransition(actor, previousRealmId, realmId);
-			int enteredYear = XuanJianVNext.Systems.Runtime.XjAnnualExecutionContext.ResolveYear(actor);
-			XjActorAccessor.SetInt(actor, XjActorDataKeys.RealmEnteredYear, Math.Max(0, enteredYear));
+			transitionYear = XuanJianVNext.Systems.Runtime.XjAnnualExecutionContext.ResolveYear(actor);
+			XjActorAccessor.SetInt(actor, XjActorDataKeys.RealmEnteredYear, Math.Max(0, transitionYear));
+			int previousTier = XjRealmSuppression.GetRealmTierFromIdForRuntime(previousRealmId);
+			int nextTier = XjRealmSuppression.GetRealmTierFromIdForRuntime(realmId);
+			if (previousTier > XjRealmSuppression.TierNone && nextTier <= previousTier)
+			{
+				// Downward/manual rewrites create an interval history that the compact
+				// threshold model cannot reconstruct safely. Drop only the ambiguous
+				// secondary debt at this boundary rather than applying future or former
+				// realm production to the wrong years.
+				XjScheduler.BaselineSecondaryAfterAmbiguousRealmChange(actor, transitionYear);
+			}
+		}
+		if (string.Equals(realmId, XjRealmIds.ZhuJi, StringComparison.Ordinal)
+			&& (realmChanged
+				|| !XjActorAccessor.TryGetInt(actor, XjActorDataKeys.XjZhuJiEnteredYear, out int storedZhuJiYear)
+				|| storedZhuJiYear <= 0))
+		{
+			int zhuJiYear = XuanJianVNext.Systems.Runtime.XjAnnualExecutionContext.ResolveYear(actor);
+			if (!realmChanged
+				&& XjActorAccessor.TryGetInt(actor, XjActorDataKeys.RealmEnteredYear, out int existingRealmYear)
+				&& existingRealmYear > 0)
+			{
+				zhuJiYear = existingRealmYear;
+			}
+			if (zhuJiYear > 0) XjActorAccessor.SetInt(actor, XjActorDataKeys.XjZhuJiEnteredYear, zhuJiYear);
 		}
 		if (string.Equals(realmId, XjRealmIds.ZiFu, StringComparison.Ordinal)
-			&& (!XjActorAccessor.TryGetInt(actor, XjActorDataKeys.XjZiFuEnteredYear, out int storedZiFuYear) || storedZiFuYear <= 0))
+			&& (realmChanged
+				|| !XjActorAccessor.TryGetInt(actor, XjActorDataKeys.XjZiFuEnteredYear, out int storedZiFuYear)
+				|| storedZiFuYear <= 0))
 		{
 			int ziFuYear = XuanJianVNext.Systems.Runtime.XjAnnualExecutionContext.ResolveYear(actor);
 			if (!realmChanged
@@ -131,7 +158,33 @@ internal static class XjCultivationStateTransitions
 		XjHighRealmMovement.ReconcileFlightStateAfterRealmWrite(actor);
 		XjCombatHotPathCache.Refresh(actor);
 		XjCultivationSeed.RefreshChuShenForCultivationState(actor);
+		if (realmChanged)
+		{
+			XjStageZeroObservation.RecordRealmTransition(actor, previousRealmId, realmId);
+		}
 		return true;
+	}
+
+	internal static int ReadZhuJiEnteredYear(Actor actor)
+	{
+		if (actor?.data == null) return 0;
+		if (XjActorAccessor.TryGetInt(actor, XjActorDataKeys.XjZhuJiEnteredYear, out int storedYear) && storedYear > 0)
+		{
+			return storedYear;
+		}
+
+		// Legacy saves can only recover this threshold while the actor is still
+		// ZhuJi. Stage6 does not replay pre-upgrade secondary years, so higher-realm
+		// legacy actors safely establish this history on their next real transition.
+		if (XjActorAccessor.TryGetString(actor, XjActorDataKeys.RealmId, out string realmId)
+			&& string.Equals(XjRealmHelper.NormalizeId(realmId), XjRealmIds.ZhuJi, StringComparison.Ordinal)
+			&& XjActorAccessor.TryGetInt(actor, XjActorDataKeys.RealmEnteredYear, out int realmYear)
+			&& realmYear > 0)
+		{
+			XjActorAccessor.SetInt(actor, XjActorDataKeys.XjZhuJiEnteredYear, realmYear);
+			return realmYear;
+		}
+		return 0;
 	}
 
 	internal static int ReadZiFuEnteredYear(Actor actor)

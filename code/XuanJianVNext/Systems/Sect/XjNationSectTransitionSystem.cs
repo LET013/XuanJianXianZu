@@ -46,7 +46,6 @@ internal static class XjNationSectTransitionSystem
 			return false;
 		}
 		if (!XjFamilyReadModel.Shared.TryGetConfirmedFamilyStableId(actorId, out long familyId) || familyId <= 0L) return false;
-		if (XjSectRepository.TryResolveFamilySect(familyId, out _)) return false;
 
 		float worldTime = World.world == null ? Math.Max(0, currentYear) : (float)World.world.getCurWorldTime();
 		if (PendingByCity.TryGetValue(cityId, out PendingTransition existing))
@@ -142,7 +141,6 @@ internal static class XjNationSectTransitionSystem
 			|| actor.city?.data == null || actor.city.data.id != pending.CityId
 			) return false;
 		if (!XjFamilyReadModel.Shared.TryGetConfirmedFamilyStableId(pending.ActorId, out long currentFamily) || currentFamily != pending.FamilyId) return false;
-		if (XjSectRepository.TryResolveFamilySect(pending.FamilyId, out _)) return false;
 		return !CityAlreadyHasSect(actor.city);
 	}
 

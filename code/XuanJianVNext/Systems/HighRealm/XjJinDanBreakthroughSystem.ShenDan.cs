@@ -101,6 +101,7 @@ internal static partial class XjJinDanBreakthroughSystem
 				text,
 				XuanJianVNext.Systems.Broadcast.XjEventIconCatalog.JinDanUpgrade);
 			XjFamilyDomainEventRouter.Publish(XjFamilyDomainEvent.ShenDanSucceeded(actor, anchor.GuoWei, jinDanDaoTu, anchorName));
+			XjStageZeroObservation.RecordJinDanResult("ShenDanSuccess", true);
 			return true;
 		}
 }
