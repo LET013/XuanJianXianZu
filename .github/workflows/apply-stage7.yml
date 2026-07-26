@@ -1,0 +1,36 @@
+name: Apply stage7 merge payload
+
+on:
+  push:
+    branches:
+      - agent/stage7-main-merge
+    paths:
+      - .github/stage7_patch.b64
+      - .github/workflows/apply-stage7.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply-stage7:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout merge branch
+        uses: actions/checkout@v4
+        with:
+          ref: agent/stage7-main-merge
+          fetch-depth: 0
+
+      - name: Verify, apply and clean payload
+        shell: bash
+        run: |
+          set -euo pipefail
+          base64 -d .github/stage7_patch.b64 | gunzip > /tmp/stage7.patch
+          echo "fe0a1f52a79b4cc69d682b63b8eb9fa3dfc74dc8c000340c44fd38b37fe87977  /tmp/stage7.patch" | sha256sum -c -
+          git apply --index --whitespace=nowarn /tmp/stage7.patch
+          rm -f .github/stage7_patch.b64 .github/workflows/apply-stage7.yml
+          git add -A
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Apply stage7 sect and UI fixes"
+          git push origin HEAD:agent/stage7-main-merge
