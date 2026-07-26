@@ -1,0 +1,76 @@
+{
+  "stage": "stage6",
+  "version": "0.9.3-stage6",
+  "status": "PASS_PRE_RELEASE_STATIC_SEMANTIC",
+  "baseline": "0.9.3-stage5",
+  "scope": "发布前语义收口；不包含 WorldBox 实际编译和实机长局结果",
+  "source_integration": {
+    "status": "PASS",
+    "checks": 48,
+    "passed": 48
+  },
+  "semantic_models": {
+    "status": "PASS",
+    "cases": 20
+  },
+  "static_audit": {
+    "status": "PASS",
+    "csharp_files": 488,
+    "json_files": 80,
+    "unchanged_stage5_csharp_hashes": 463
+  },
+  "legacy_regressions": {
+    "stage1_periodic_debt": "PASS",
+    "stage2_lane_semantics": "PASS",
+    "stage3_candidate_semantics": "PASS",
+    "stage5_ecology_semantics": "PASS",
+    "stage5_tool_selftest": "PASS",
+    "stage4_full_allocation_model_rerun": "NOT_RERUN_40M_LOOP",
+    "stage4_safety_coverage": "existing PASS + unchanged hashes + stage6 in-flight death case"
+  },
+  "initial_package_roundtrip": {
+    "worktree_files": 1451,
+    "extracted_files": 1451,
+    "missing": 0,
+    "extra": 0,
+    "hash_differences": 0,
+    "extracted_source_test": "PASS",
+    "extracted_semantics_test": "PASS",
+    "extracted_static_audit": "PASS"
+  },
+  "expected_final_package": {
+    "files": 1453,
+    "changed_existing_files_vs_stage5": 26,
+    "added_files_vs_stage5": 13,
+    "removed_files_vs_stage5": 0,
+    "overlay_patch_files": 39
+  },
+  "compiler_availability": {
+    "dotnet": false,
+    "csc": false,
+    "mcs": false,
+    "msbuild": false,
+    "csi": false
+  },
+  "release_gate": "可进入实机候选测试；正式发布仍需实际程序集编译、新旧档启动、存读档专项及 1x/20x/40x 长局对照通过",
+  "final_package_roundtrip": {
+    "full_source_files": 1453,
+    "full_extracted_files": 1453,
+    "full_missing": 0,
+    "full_extra": 0,
+    "full_hash_differences": 0,
+    "overlay_source_files": 39,
+    "overlay_extracted_files": 39,
+    "overlay_missing": 0,
+    "overlay_extra": 0,
+    "overlay_hash_differences": 0,
+    "extracted_stage6_source": "PASS",
+    "extracted_stage6_semantics": "PASS",
+    "extracted_stage6_static": "PASS",
+    "extracted_stage1_regression": "PASS",
+    "extracted_stage2_regression": "PASS",
+    "extracted_stage3_regression": "PASS",
+    "extracted_stage5_ecology": "PASS",
+    "extracted_stage5_tools": "PASS_4_OF_4"
+  }
+}
