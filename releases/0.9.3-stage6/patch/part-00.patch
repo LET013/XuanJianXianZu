@@ -1,0 +1,265 @@
+diff --git a/code/XuanJianVNext/Core/XjRuntimeSettings.cs b/code/XuanJianVNext/Core/XjRuntimeSettings.cs
+index fb45ffe..d4d2e12 100644
+--- a/code/XuanJianVNext/Core/XjRuntimeSettings.cs
++++ b/code/XuanJianVNext/Core/XjRuntimeSettings.cs
+@@ -55,7 +55,7 @@ internal static class XjRuntimeSettings
+ 	private static bool broadcastHighRealmInfluence = true;
+ 	private static bool cultivationEnabled = true;
+ 	private static bool showFpsOverlay;
+-	private static bool stageZeroObservation = true;
++	private static bool stageZeroObservation = false;
+ 	private static bool allowSectRebellion;
+ 	private static bool spawnJinXingYaoXie = true;
+ 	private static bool spawnLongShu = true;
+diff --git a/code/XuanJianVNext/Core/XjScheduler.cs b/code/XuanJianVNext/Core/XjScheduler.cs
+index 2dcb8c8..a399a6e 100644
+--- a/code/XuanJianVNext/Core/XjScheduler.cs
++++ b/code/XuanJianVNext/Core/XjScheduler.cs
+@@ -73,6 +73,21 @@ internal static class XjScheduler
+ 		internal bool ReleaseRequested;
+ 	}
+ 
++	/// <summary>
++	/// Exact-year secondary gameplay cursor. These tasks change proficiency,
++	/// production or annual chance outcomes, so unlike compatibility maintenance
++	/// every completed core year is consumed in order.
++	/// </summary>
++	private sealed class AnnualSecondaryState
++	{
++		internal int ActiveYear;
++		internal int LatestRequestedYear;
++		internal int LastCompletedYear;
++		internal bool Queued;
++		internal bool InFlight;
++		internal bool ReleaseRequested;
++	}
++
+ 	private const int CleanupRemoveBudget = 24;
+ 	private const int BootstrapBudget = 96;
+ 	private const double BootstrapTimeBudgetMs = 0.9;
+@@ -82,6 +97,8 @@ internal static class XjScheduler
+ 	private const double SeedLaneTimeBudgetMs = 0.65;
+ 	private const int AnnualCoreStageBudget = 192;
+ 	private const double AnnualCoreLaneTimeBudgetMs = 0.95;
++	private const int AnnualSecondaryActorBudget = 192;
++	private const double AnnualSecondaryLaneTimeBudgetMs = 0.70;
+ 	private const int AnnualMaintenanceStageBudget = 288;
+ 	private const double AnnualMaintenanceLaneTimeBudgetMs = 0.70;
+ 	private const int AnnualCultivatorSweepBudget = 384;
+@@ -107,10 +124,15 @@ internal static class XjScheduler
+ 	private static int _backgroundPhase;
+ 	private static int _pendingLongShuGrowthPasses;
+ 	private static bool _longShuYearMaintenancePending;
++	private static int _actorProgressionRevision;
+ 	private static readonly Queue<long> AnnualActorQueue = new Queue<long>();
+ 	private static readonly Dictionary<long, AnnualActorState> AnnualActorStates = new Dictionary<long, AnnualActorState>();
+ 	private static readonly Stack<AnnualActorState> AnnualActorStatePool = new Stack<AnnualActorState>();
+ 	private static readonly Dictionary<long, int> DeferredAnnualCompletions = new Dictionary<long, int>();
++	private static readonly Queue<long> AnnualSecondaryQueue = new Queue<long>();
++	private static readonly Dictionary<long, AnnualSecondaryState> AnnualSecondaryStates = new Dictionary<long, AnnualSecondaryState>();
++	private static readonly Stack<AnnualSecondaryState> AnnualSecondaryStatePool = new Stack<AnnualSecondaryState>();
++	private static readonly Dictionary<long, int> DeferredAnnualSecondaryCompletions = new Dictionary<long, int>();
+ 	private static readonly Queue<long> AnnualMaintenanceQueue = new Queue<long>();
+ 	private static readonly Dictionary<long, AnnualMaintenanceState> AnnualMaintenanceStates = new Dictionary<long, AnnualMaintenanceState>();
+ 	private static readonly Stack<AnnualMaintenanceState> AnnualMaintenanceStatePool = new Stack<AnnualMaintenanceState>();
+@@ -130,6 +152,7 @@ internal static class XjScheduler
+ 		|| XjAnnualCultivatorSweepLane.HasPending
+ 		|| XjStageZeroObservation.HasPending
+ 		|| AnnualActorQueue.Count > 0
++		|| AnnualSecondaryQueue.Count > 0
+ 		|| AnnualMaintenanceQueue.Count > 0
+ 		|| AutoCollectRecheckQueue.Count > 0
+ 		|| HasCriticalDeathWork
+@@ -138,6 +161,7 @@ internal static class XjScheduler
+ 	internal static bool HasUrgentSimulationBacklog => HasCriticalDeathWork;
+ 
+ 	internal static bool HasAnnualActorBacklog => AnnualActorQueue.Count > 0
++		|| AnnualSecondaryQueue.Count > 0
+ 		|| AnnualMaintenanceQueue.Count > 0
+ 		|| XjAnnualCultivatorSweepLane.HasPending;
+ 
+@@ -146,10 +170,15 @@ internal static class XjScheduler
+ 		get
+ 		{
+ 			int threshold = Math.Max(256, XjCultivatorCache.Count / 4);
+-			return XjAnnualCultivatorSweepLane.HasPending || AnnualActorQueue.Count >= threshold;
++			return XjAnnualCultivatorSweepLane.HasPending
++				|| AnnualActorQueue.Count >= threshold
++				|| AnnualSecondaryQueue.Count >= threshold
++				|| AnnualMaintenanceQueue.Count >= threshold;
+ 		}
+ 	}
+ 
++	internal static int ActorProgressionRevision => _actorProgressionRevision;
++
+ 	private static bool HasCriticalDeathWork => XjZiFuFailureDeathLane.HasPending
+ 		|| XjRenDanDeathLane.HasPending
+ 		|| XjQiYuDongTianDeathLane.HasPending
+@@ -405,6 +434,23 @@ internal static class XjScheduler
+ 		return state;
+ 	}
+ 
++	private static AnnualSecondaryState RentAnnualSecondaryState(
++		int activeYear,
++		int latestRequestedYear,
++		int lastCompletedYear)
++	{
++		AnnualSecondaryState state = AnnualSecondaryStatePool.Count > 0
++			? AnnualSecondaryStatePool.Pop()
++			: new AnnualSecondaryState();
++		state.ActiveYear = activeYear;
++		state.LatestRequestedYear = latestRequestedYear;
++		state.LastCompletedYear = lastCompletedYear;
++		state.Queued = false;
++		state.InFlight = false;
++		state.ReleaseRequested = false;
++		return state;
++	}
++
+ 	private static AnnualMaintenanceState RentAnnualMaintenanceState(
+ 		int fromYearInclusive,
+ 		int activeYear,
+@@ -442,6 +488,21 @@ internal static class XjScheduler
+ 		}
+ 	}
+ 
++	private static void ReleaseAnnualSecondaryState(AnnualSecondaryState state)
++	{
++		if (state == null) return;
++		state.ActiveYear = 0;
++		state.LatestRequestedYear = 0;
++		state.LastCompletedYear = 0;
++		state.Queued = false;
++		state.InFlight = false;
++		state.ReleaseRequested = false;
++		if (AnnualSecondaryStatePool.Count < AnnualStatePoolLimit)
++		{
++			AnnualSecondaryStatePool.Push(state);
++		}
++	}
++
+ 	private static void ReleaseAnnualMaintenanceState(AnnualMaintenanceState state)
+ 	{
+ 		if (state == null) return;
+@@ -468,6 +529,15 @@ internal static class XjScheduler
+ 		return true;
+ 	}
+ 
++	private static bool RemoveAnnualSecondaryState(long actorId)
++	{
++		if (!AnnualSecondaryStates.TryGetValue(actorId, out AnnualSecondaryState state)) return false;
++		AnnualSecondaryStates.Remove(actorId);
++		if (state.InFlight) state.ReleaseRequested = true;
++		else ReleaseAnnualSecondaryState(state);
++		return true;
++	}
++
+ 	private static bool RemoveAnnualMaintenanceState(long actorId)
+ 	{
+ 		if (!AnnualMaintenanceStates.TryGetValue(actorId, out AnnualMaintenanceState state)) return false;
+@@ -512,6 +582,7 @@ internal static class XjScheduler
+ 			if (state == null)
+ 			{
+ 				int persistedCompletedYear = ReadEffectiveLastCompletedYear(actor);
++				EnsureAnnualSecondaryStateLoaded(actor, actorId, persistedCompletedYear);
+ 				EnsureAnnualMaintenanceStateLoaded(actor, actorId, persistedCompletedYear);
+ 				if (requestedYear <= persistedCompletedYear)
+ 				{
+@@ -568,7 +639,9 @@ internal static class XjScheduler
+ 
+ 		int qualifiedYear = EnsureCultivationQualifiedYear(actor, baselineYear);
+ 		if (qualifiedYear <= 0) return;
+-		EnsureAnnualMaintenanceStateLoaded(actor, actorId, ReadEffectiveLastCompletedYear(actor));
++		int effectiveCoreCompletedYear = ReadEffectiveLastCompletedYear(actor);
++		EnsureAnnualSecondaryStateLoaded(actor, actorId, effectiveCoreCompletedYear);
++		EnsureAnnualMaintenanceStateLoaded(actor, actorId, effectiveCoreCompletedYear);
+ 
+ 		if (AnnualActorStates.TryGetValue(actorId, out AnnualActorState existingState))
+ 		{
+@@ -590,6 +663,8 @@ internal static class XjScheduler
+ 				existingState.ActiveYear = qualifiedYear;
+ 				existingState.Stage = XjAnnualPipelineStage.Prepare;
+ 			}
++			EnsureAnnualSecondaryBaseline(actor, existingState.LastCompletedYear);
++			EnqueueAnnualSecondary(actor, actorId, existingState.LastCompletedYear);
+ 			EnsureAnnualMaintenanceBaseline(actor, existingState.LastCompletedYear);
+ 			EnqueueAnnualMaintenance(actor, actorId, existingState.LastCompletedYear);
+ 			QueueAnnualState(actorId, existingState);
+@@ -611,6 +686,8 @@ internal static class XjScheduler
+ 			}
+ 			else
+ 			{
++				EnsureAnnualSecondaryBaseline(actor, persistedState.LastCompletedYear);
++				EnqueueAnnualSecondary(actor, actorId, persistedState.LastCompletedYear);
+ 				EnsureAnnualMaintenanceBaseline(actor, persistedState.LastCompletedYear);
+ 				EnqueueAnnualMaintenance(actor, actorId, persistedState.LastCompletedYear);
+ 			}
+@@ -635,6 +712,8 @@ internal static class XjScheduler
+ 		{
+ 			inferredCompletedYear = Math.Max(0, baselineYear);
+ 		}
++		EnsureAnnualSecondaryBaseline(actor, inferredCompletedYear);
++		EnqueueAnnualSecondary(actor, actorId, inferredCompletedYear);
+ 		EnsureAnnualMaintenanceBaseline(actor, inferredCompletedYear);
+ 		EnqueueAnnualMaintenance(actor, actorId, inferredCompletedYear);
+ 
+@@ -744,8 +823,10 @@ internal static class XjScheduler
+ 		}
+ 
+ 		int completedCoreYear = Math.Max(legacyState.LastCompletedYear, legacyState.ActiveYear);
++		EnsureAnnualSecondaryStateLoaded(actor, actorId, Math.Max(0, legacyState.ActiveYear - 1));
+ 		EnsureAnnualMaintenanceStateLoaded(actor, actorId, Math.Max(0, legacyState.ActiveYear - 1));
+ 		CompletePersistedAnnualState(actor, completedCoreYear);
++		EnqueueAnnualSecondary(actor, actorId, legacyState.ActiveYear);
+ 		EnqueueAnnualMaintenance(actor, actorId, legacyState.ActiveYear);
+ 		XjStageZeroObservation.RecordAnnualCoreCompletion(actor, legacyState.ActiveYear, migratedLegacyFinalize: true);
+ 
+@@ -761,6 +842,121 @@ internal static class XjScheduler
+ 		return legacyState;
+ 	}
+ 
++	private static bool TryReadPersistedPendingAnnualSecondaryState(Actor actor, out AnnualSecondaryState state)
++	{
++		state = null;
++		if (actor?.data == null) return false;
++		XjActorAccessor.TryGetInt(actor, XjActorDataKeys.XjAnnualSecondaryActiveYear, out int activeYear);
++		XjActorAccessor.TryGetInt(actor, XjActorDataKeys.XjAnnualSecondaryLatestRequestedYear, out int latestYear);
++		int lastCompletedYear = ReadEffectiveAnnualSecondaryLastCompletedYear(actor);
++		if (activeYear <= lastCompletedYear || latestYear < activeYear) return false;
++		state = RentAnnualSecondaryState(activeYear, latestYear, lastCompletedYear);
++		return true;
++	}
++
++	private static void EnsureAnnualSecondaryStateLoaded(Actor actor, long actorId, int baselineYear)
++	{
++		if (actor?.data == null || actorId <= 0L) return;
++		if (!AnnualSecondaryStates.ContainsKey(actorId)
++			&& TryReadPersistedPendingAnnualSecondaryState(actor, out AnnualSecondaryState persistedState))
++		{
++			AnnualSecondaryStates[actorId] = persistedState;
++			QueueAnnualSecondaryState(actorId, persistedState);
++			return;
++		}
++		EnsureAnnualSecondaryBaseline(actor, baselineYear);
++	}
++
++	private static void EnsureAnnualSecondaryBaseline(Actor actor, int baselineYear)
++	{
++		if (actor?.data == null) return;
++		if (XjActorAccessor.TryGetInt(actor, XjActorDataKeys.XjAnnualSecondaryLastCompletedYear, out _)) return;
++		int qualifiedYear = ReadCultivationQualifiedYear(actor);
++		int normalized = Math.Max(Math.Max(0, baselineYear), qualifiedYear > 0 ? qualifiedYear - 1 : 0);
++		XjActorAccessor.SetInt(actor, XjActorDataKeys.XjAnnualSecondaryLastCompletedYear, normalized);
++	}
++
++	private static int ReadEffectiveAnnualSecondaryLastCompletedYear(Actor actor)
++	{
++		if (actor?.data == null) return 0;
++		XjActorAccessor.TryGetInt(actor, XjActorDataKeys.XjAnnualSecondaryLastCompletedYear, out int persistedYear);
++		long actorId = ((BaseSystemData)actor.data).id;
++		if (actorId > 0L && DeferredAnnualSecondaryCompletions.TryGetValue(actorId, out int deferredYear))
++		{
++			persistedYear = Math.Max(persistedYear, deferredYear);
++		}
++		int qualifiedYear = ReadCultivationQualifiedYear(actor);
++		if (qualifiedYear > 0) persistedYear = Math.Max(persistedYear, qualifiedYear - 1);
