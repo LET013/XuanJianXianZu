@@ -1,0 +1,58 @@
+玄鉴仙族 0.9.3-stage6 变更文件清单
+基线：0.9.3-stage5
+
+修改既有文件：26
+新增文件：13
+删除文件：0
+
+【修改】
+M  code/XuanJianVNext/Core/XjRuntimeSettings.cs
+M  code/XuanJianVNext/Core/XjScheduler.cs
+M  code/XuanJianVNext/Core/XjStageFiveEcologyGuard.cs
+M  code/XuanJianVNext/Data/Archive/XjWorldArchiveData.cs
+M  code/XuanJianVNext/Data/Rules/XjActorDataKeys.cs
+M  code/XuanJianVNext/Data/Rules/XjCraftTraitRules.cs
+M  code/XuanJianVNext/Data/Rules/XjRealmHelper.cs
+M  code/XuanJianVNext/Systems/Actor/XjActorAccessor.cs
+M  code/XuanJianVNext/Systems/Archive/XjWorldArchiveMemory.cs
+M  code/XuanJianVNext/Systems/Archive/XjWorldSchemaGuard.cs
+M  code/XuanJianVNext/Systems/Combat/XjRealmSuppression.cs
+M  code/XuanJianVNext/Systems/Cultivation/XjCultivationStateTransitions.cs
+M  code/XuanJianVNext/Systems/GongFa/XjGongFaAttemptSchedule.cs
+M  code/XuanJianVNext/Systems/GongFa/XjGongFaSystem.cs
+M  code/XuanJianVNext/Systems/HighRealm/XjJinDanBreakthroughSystem.Gifts.cs
+M  code/XuanJianVNext/Systems/HighRealm/XjQiuJinFa.cs
+M  code/XuanJianVNext/Systems/HighRealm/XjXianJiAccessor.cs
+M  code/XuanJianVNext/Systems/HighRealm/XjXianJiLifecycle.cs
+M  code/XuanJianVNext/Systems/HighRealm/XjXuanJianShenTongSpecials.cs
+M  code/XuanJianVNext/Systems/Runtime/XjAnnualExecutionContext.cs
+M  code/XuanJianVNext/Systems/Runtime/XjAnnualWorldDetectionStore.cs
+M  code/XuanJianVNext/Systems/Runtime/XjSchedulerActorPipeline.cs
+M  code/XuanJianVNext/Systems/Warehouse/XjFamilyFaBaoWarehouse.cs
+M  code/XuanJianVNext/Systems/WeaponArt/XjWeaponArtSystem.cs
+M  default_config.json
+M  mod.json
+
+【新增】
+A  code/XuanJianVNext/Systems/HighRealm/XjXianJiOpportunitySchedule.cs
+A  tools/stage6/run_stage6_tests.bat
+A  tools/stage6/stage6_semantics_test.py
+A  tools/stage6/stage6_semantics_test_result.json
+A  tools/stage6/stage6_source_integration_test.py
+A  tools/stage6/stage6_source_integration_test_result.json
+A  tools/stage6/stage6_stage5_unchanged_code_hashes.json
+A  tools/stage6/stage6_static_audit.py
+A  tools/stage6/stage6_static_audit_result.json
+A  tools/stage6/阶段6测试说明.md
+A  阶段6发布前语义收口说明与测试报告.md
+A  阶段6变更文件清单.txt
+A  阶段6成品回验.json
+
+【改动范围摘要】
+1. 阶段资格时钟：功法、神通、求金法不跨前置条件继承旧债。
+2. 精确次级年度车道：武艺、百艺、法宝、遗失法宝与金丹十年赐予逐逻辑年结算。
+3. 历史上下文：按逻辑年份还原境界、年龄、器艺和武艺激活状态。
+4. 存读档与旁路：次级队列持久化、死亡清理、手动降境保守基线。
+5. 世界统计：同年快照绑定角色推进版本。
+6. 发布配置：诊断默认关闭，生态守卫跨存档持久化，存档版本升至109。
+7. 阶段6专项测试、说明报告和成品回验材料。
