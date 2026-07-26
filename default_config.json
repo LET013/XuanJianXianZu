@@ -1,0 +1,254 @@
+{
+  "ConfigItems": [
+    {
+      "Id": "XuanJian_config_auto_collect_zhuji",
+      "Name": "筑基境自动收藏",
+      "Description": "角色达到筑基境时自动加入收藏夹",
+      "Type": "SWITCH",
+      "BoolVal": false,
+      "Callback": "XuanJianConfig:AutoCollectZhuJiCallBack"
+    },
+    {
+      "Id": "XuanJian_config_auto_collect_zifu",
+      "Name": "紫府境自动收藏",
+      "Description": "角色达到紫府境时自动加入收藏夹",
+      "Type": "SWITCH",
+      "BoolVal": true,
+      "Callback": "XuanJianConfig:AutoCollectZiFuCallBack"
+    },
+    {
+      "Id": "XuanJian_config_auto_collect_jindan",
+      "Name": "金丹境自动收藏",
+      "Description": "角色达到金丹境时自动加入收藏夹",
+      "Type": "SWITCH",
+      "BoolVal": true,
+      "Callback": "XuanJianConfig:AutoCollectJinDanCallBack"
+    },
+    {
+      "Id": "XuanJian_config_auto_collect_tianshoudaomai",
+      "Name": "天授道脉自动收藏",
+      "Description": "角色拥有天授道脉时自动加入收藏夹",
+      "Type": "SWITCH",
+      "BoolVal": true,
+      "Callback": "XuanJianConfig:AutoCollectTianShouDaoMaiCallBack"
+    },
+    {
+      "Id": "XuanJian_config_auto_collect_zifu_reincarnation",
+      "Name": "紫府金性转生自动收藏",
+      "Description": "紫府金性转生成功后自动加入收藏夹",
+      "Type": "SWITCH",
+      "BoolVal": true,
+      "Callback": "XuanJianConfig:AutoCollectZiFuReincarnationCallBack"
+    },
+    {
+      "Id": "XuanJian_config_auto_collect_jindan_reincarnation",
+      "Name": "金丹转生自动收藏",
+      "Description": "金丹转生成功后自动加入收藏夹",
+      "Type": "SWITCH",
+      "BoolVal": true,
+      "Callback": "XuanJianConfig:AutoCollectJinDanReincarnationCallBack"
+    },
+    {
+      "Id": "XuanJian_config_auto_collect_fabao_owner",
+      "Name": "法宝主人自动收藏",
+      "Description": "角色获得法宝时自动加入收藏夹",
+      "Type": "SWITCH",
+      "BoolVal": true,
+      "Callback": "XuanJianConfig:AutoCollectFaBaoOwnerCallBack"
+    },
+    {
+      "Id": "XuanJian_config_auto_collect_sword_immortal",
+      "Name": "剑仙自动收藏",
+      "Description": "角色悟得剑意并获得剑仙称号时自动加入收藏夹；紫府、金丹境界自动收藏仍由对应开关控制",
+      "Type": "SWITCH",
+      "BoolVal": false,
+      "Callback": "XuanJianConfig:AutoCollectSwordImmortalCallBack"
+    },
+    {
+      "Id": "XuanJian_config_enable_bottleneck_announcement",
+      "Name": "【修行】瓶颈与冲关",
+      "Description": "角色触发或突破修行瓶颈时发布玄鉴通知",
+      "Type": "SWITCH",
+      "BoolVal": true,
+      "Callback": "XuanJianConfig:EnableBottleneckAnnouncementCallBack"
+    },
+    {
+      "Id": "XuanJian_config_enable_gongfa_write_announcement",
+      "Name": "【传承】功法入库",
+      "Description": "功法、求金法、采气法入库或晋升时发布玄鉴通知",
+      "Type": "SWITCH",
+      "BoolVal": true,
+      "Callback": "XuanJianConfig:EnableGongFaWriteAnnouncementCallBack"
+    },
+    {
+      "Id": "XuanJian_config_enable_dongtian_announcement",
+      "Name": "【洞天】显世与归属",
+      "Description": "洞天显世、洞天归属、宗门洞天营造等事件发布玄鉴通知",
+      "Type": "SWITCH",
+      "BoolVal": true,
+      "Callback": "XuanJianConfig:EnableDongTianAnnouncementCallBack"
+    },
+    {
+      "Id": "XuanJian_config_enable_yinsi_announcement",
+      "Name": "【阴司】追索与离去",
+      "Description": "阴司现身、追索、离去等事件发布玄鉴通知",
+      "Type": "SWITCH",
+      "BoolVal": true,
+      "Callback": "XuanJianConfig:EnableYinSiAnnouncementCallBack"
+    },
+    {
+      "Id": "XuanJian_config_enable_sect_announcement",
+      "Name": "【宗门】治理与冲突",
+      "Description": "开宗立道、宗门宣战、宗门大族、宗门任务等事件发布玄鉴通知",
+      "Type": "SWITCH",
+      "BoolVal": true,
+      "Callback": "XuanJianConfig:EnableSectAnnouncementCallBack"
+    },
+    {
+      "Id": "XuanJian_config_enable_cultivation",
+      "Name": "允许修炼",
+      "Description": "开启后，符合条件的智慧文明种族可进入玄鉴修炼链路；关闭后所有生物都不会进入修炼链路。动物与动物亚种始终不可修炼",
+      "Type": "SWITCH",
+      "BoolVal": true,
+      "Callback": "XuanJianConfig:EnableCultivationCallBack"
+    },
+    {
+      "Id": "XuanJian_config_show_fps_overlay",
+      "Name": "性能信息显示",
+      "Description": "默认关闭。开启后在左上角显示帧率与运行压力概况，用于排查卡顿。",
+      "Type": "SWITCH",
+      "BoolVal": false,
+      "Callback": "XuanJianConfig:ShowFpsOverlayCallBack"
+    },
+    {
+      "Id": "XuanJian_config_allow_sect_rebellion",
+      "Name": "允许宗门叛乱",
+      "Description": "开启后，满足高阶修士、距离与城镇数量条件的远方城镇可另立新宗；关闭后宗门领土不会分裂",
+      "Type": "SWITCH",
+      "BoolVal": false,
+      "Callback": "XuanJianConfig:AllowSectRebellionCallBack"
+    },
+    {
+      "Id": "XuanJian_config_enable_death_announcement",
+      "Name": "【生死】高境陨落",
+      "Description": "高境修士死亡、转生、陨落等事件发布玄鉴通知",
+      "Type": "SWITCH",
+      "BoolVal": true,
+      "Callback": "XuanJianConfig:EnableDeathAnnouncementCallBack"
+    },
+    {
+      "Id": "XuanJian_config_enable_lingwu_announcement",
+      "Name": "【资源】灵物现世",
+      "Description": "灵物现世、入库、斩龙得灵等事件发布玄鉴通知",
+      "Type": "SWITCH",
+      "BoolVal": true,
+      "Callback": "XuanJianConfig:EnableLingWuAnnouncementCallBack"
+    },
+    {
+      "Id": "XuanJian_config_enable_highrealm_announcement",
+      "Name": "【修行】高境与果位",
+      "Description": "紫府、金丹、神丹、果位、求金等高境事件发布玄鉴通知",
+      "Type": "SWITCH",
+      "BoolVal": true,
+      "Callback": "XuanJianConfig:EnableHighRealmAnnouncementCallBack"
+    },
+    {
+      "Id": "XuanJian_config_enable_treasure_milestone_announcement",
+      "Name": "【重宝】延寿丹与法宝",
+      "Description": "只控制九曜延寿丹、紫府灵宝和金丹法宝三类重要公告；普通炼丹、炼器、符箓、阵法与采药不再发布公告",
+      "Type": "SWITCH",
+      "BoolVal": true,
+      "Callback": "XuanJianConfig:EnableTreasureMilestoneAnnouncementCallBack"
+    },
+    {
+      "Id": "XuanJian_config_enable_family_inheritance_announcement",
+      "Name": "【家族】族议与传承",
+      "Description": "族中所举、族议拨付真实资源与家族传承等事件发布玄鉴通知；家主更替和家族代表不再公告或写入史册",
+      "Type": "SWITCH",
+      "BoolVal": true,
+      "Callback": "XuanJianConfig:EnableFamilyInheritanceAnnouncementCallBack"
+    },
+    {
+      "Id": "XuanJian_config_enable_highrealm_influence_announcement",
+      "Name": "【家族】上修扶持与干预",
+      "Description": "紫府及以上修士扶持后辈、左右族议或借外族下修布置棋局时发布玄鉴通知；关闭后真实影响和历史记录仍正常生效",
+      "Type": "SWITCH",
+      "BoolVal": true,
+      "Callback": "XuanJianConfig:EnableHighRealmInfluenceAnnouncementCallBack"
+    },
+    {
+      "Id": "XuanJian_config_aptitude_grant_chance_percent",
+      "Name": "修炼特质获得概率",
+      "Description": "五岁或六岁容错判定时获得朽木难雕至天授道脉修炼资质的普通判定上限，按0.6.3默认40%；范围25%-40%，血脉与直系高境保底另行生效",
+      "Type": "INT_SLIDER",
+      "IntVal": 40,
+      "MinIntVal": 25,
+      "MaxIntVal": 40,
+      "StepIntVal": 1,
+      "Callback": "XuanJianConfig:AptitudeGrantChancePercentCallBack"
+    },
+    {
+      "Id": "XuanJian_config_qiujinfa_chance_permille",
+      "Name": "求金法参悟概率（千分制）",
+      "Description": "设置求金法每次参悟的最高成功率，单位为‰；10表示10‰=1%，50表示50‰=5%",
+      "Type": "INT_SLIDER",
+      "IntVal": 10,
+      "MinIntVal": 1,
+      "MaxIntVal": 50,
+      "StepIntVal": 1,
+      "Callback": "XuanJianConfig:QiuJinFaChancePermilleCallBack"
+    },
+    {
+      "Id": "XuanJian_config_enable_yao_xie_generation",
+      "Name": "金性妖邪生成",
+      "Description": "紫府冲击金丹失败时，允许按规则诞生金性妖邪",
+      "Type": "SWITCH",
+      "BoolVal": true,
+      "Callback": "XuanJianConfig:EnableYaoXieGenerationCallBack"
+    },
+    {
+      "Id": "XuanJian_config_enable_longshu_generation",
+      "Name": "龙属生成",
+      "Description": "开启后允许世界按规则生成龙属，存量上限九名",
+      "Type": "SWITCH",
+      "BoolVal": true,
+      "Callback": "XuanJianConfig:EnableLongShuGenerationCallBack"
+    },
+    {
+      "Id": "XuanJian_config_qiyu_dongtian_spawn_years",
+      "Name": "奇遇洞天出现间隔",
+      "Description": "设置奇遇洞天下一次开启后的排期间隔",
+      "Type": "INT_SLIDER",
+      "IntVal": 300,
+      "MinIntVal": 100,
+      "MaxIntVal": 500,
+      "StepIntVal": 10,
+      "Callback": "XuanJianConfig:QiYuDongTianSpawnYearsCallBack"
+    },
+    {
+      "Id": "XuanJian_config_jindan_dongtian_cultivate_years",
+      "Name": "金丹洞天闭关时长",
+      "Description": "设置金丹进入宗门洞天后的闭关年数",
+      "Type": "INT_SLIDER",
+      "IntVal": 500,
+      "MinIntVal": 1,
+      "MaxIntVal": 1000,
+      "StepIntVal": 1,
+      "Callback": "XuanJianConfig:JinDanDongTianCultivateYearsCallBack"
+    },
+    {
+      "Id": "XuanJian_config_jindan_post_peace_years",
+      "Name": "金丹游历期时长",
+      "Description": "设置金丹闭关结束后的游历年数",
+      "Type": "INT_SLIDER",
+      "IntVal": 10,
+      "MinIntVal": 1,
+      "MaxIntVal": 100,
+      "StepIntVal": 1,
+      "Callback": "XuanJianConfig:JinDanPostPeaceYearsCallBack"
+    }
+  ]
+}
+
+
+
