@@ -72,7 +72,7 @@ internal partial class XjVNextPatches
 		return false;
 	}
 
-	[HarmonyPatch(typeof(XjGuoWeiRegistry), "IsPermanentlyLockedGuoWei")]
+	[HarmonyPatch(typeof(XjGuoWeiRegistry), "IsPermanentlyLockedGuoWei", new Type[] { typeof(string) })]
 	[HarmonyPrefix]
 	private static bool XuanJian_YaoShuGreatSage_DebugManifestAll_IgnorePermanentLock_Prefix(ref bool __result)
 	{
