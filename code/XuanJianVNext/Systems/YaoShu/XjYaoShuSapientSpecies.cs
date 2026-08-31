@@ -4,6 +4,7 @@ using UnityEngine;
 using XuanJianVNext.Core;
 using XuanJianVNext.Data.Rules;
 using XuanJianVNext.Systems.ActorSystem;
+using XuanJianVNext.Systems.Aptitude;
 using XuanJianVNext.Systems.DengMingShi;
 using XuanJianVNext.Interop.WorldBox;
 
@@ -48,20 +49,40 @@ internal static class XjYaoShuSapientSpecies
 		if (!AssetIds.TryGetValue(sageSlotId, out string assetId) || AssetManager.actor_library?.get(assetId) == null) return;
 		MapBox world = World.world;
 		if (world?.units == null) return;
+
 		for (int i = 0; i < SpawnCount; i++)
 		{
 			if (!TryFindTile(origin, sageSlotId, currentYear, i, out WorldTile tile)) continue;
 			Actor actor = null;
 			try
 			{
+				// 必须经 WorldBox 原生 spawnNewUnit 完成 Actor/亚种/AI/空间容器初始化。
+				// 不把 BabyMaker 当成“强制化生 API”，避免无父母/无城市上下文时的空引用。
 				actor = world.units.spawnNewUnit(assetId, tile, false, false, 0f, null, false, true);
 				if (actor?.data == null) continue;
+
 				XjActorAccessor.SetInt(actor, XjActorDataKeys.XjYaoShuYaoMin, 1);
 				XjActorAccessor.SetInt(actor, XjActorDataKeys.XjZzCheckedAge5, 0);
 				XjExternalUnitTransferContext.EnterTraitTransfer();
-				try { if (!actor.hasTrait(YaoMinTraitId)) actor.addTrait(YaoMinTraitId, false); }
-				finally { XjExternalUnitTransferContext.ExitTraitTransfer(); }
+				try
+				{
+					if (!actor.hasTrait(YaoMinTraitId)) actor.addTrait(YaoMinTraitId, false);
+				}
+				finally
+				{
+					XjExternalUnitTransferContext.ExitTraitTransfer();
+				}
+
 				actor.clearTraitCache();
+				long actorId = ((BaseSystemData)actor.data).id;
+				if (actorId > 0L)
+				{
+					// 原生出生完成后立刻登记玄鉴出生种子通道。真正的资质判定仍沿用
+					// 统一五岁门槛，不为妖民另造一套修炼随机逻辑。
+					XjActorRegistry.Register(actor, out _);
+					XjAptitudeSeedLane.Enqueue(actorId);
+				}
+				actor.setStatsDirty();
 			}
 			catch (Exception ex)
 			{
@@ -81,7 +102,11 @@ internal static class XjYaoShuSapientSpecies
 			int y = origin.pos.y + XjDeterministicHash.PositiveIndex(seed + i * 31L, "y", 9) - 4;
 			if (x < 0 || y < 0 || x >= MapBox.width || y >= MapBox.height) continue;
 			WorldTile tile = World.world.GetTileSimple(x, y);
-			if (tile?.Type != null && !tile.Type.lava && !tile.hasBuilding()) { result = tile; return true; }
+			if (tile?.Type != null && !tile.Type.lava && !tile.hasBuilding())
+			{
+				result = tile;
+				return true;
+			}
 		}
 		return false;
 	}
