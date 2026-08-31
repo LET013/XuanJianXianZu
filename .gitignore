@@ -1,0 +1,12 @@
+# Local build, analysis, and agent work products.
+bin/
+obj/
+.codebase-index/
+.codex/
+.xj_ilspy/
+.agents/
+AGENTS.md
+
+# Editor-local files.
+*.user
+*.suo
