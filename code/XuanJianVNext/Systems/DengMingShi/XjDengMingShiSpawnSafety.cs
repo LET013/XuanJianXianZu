@@ -62,6 +62,16 @@ internal static class XjDengMingShiSpawnSafety
 		XjNativeEntityLifecycleInterop.TryRemoveActor(actor);
 	}
 
+	/// <summary>
+	/// Same removal boundary as TryRemoveInvalidActor, but exposes whether the native
+	/// unit index actually stopped resolving the actor. Failure-only transaction guards
+	/// use this to report how many partial synthetic actors were truly rolled back.
+	/// </summary>
+	internal static bool TryRemoveInvalidActorWithResult(Actor actor)
+	{
+		return XjNativeEntityLifecycleInterop.TryRemoveActor(actor);
+	}
+
 	private static bool IsKingdomCiv(Actor actor)
 	{
 		try
