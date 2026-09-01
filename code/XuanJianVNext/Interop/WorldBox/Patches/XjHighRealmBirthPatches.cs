@@ -2,6 +2,7 @@ using HarmonyLib;
 using XuanJianVNext.Systems.Family;
 using XuanJianVNext.Systems.HighRealm;
 using XuanJianVNext.Systems.Shi;
+using XuanJianVNext.Systems.YaoShu;
 
 namespace XuanJianVNext.Patches;
 
@@ -45,5 +46,6 @@ internal static class XjHighRealmBirthPatches
 		XjHighRealmDescendantRules.RefreshFromParents(__result);
 		XjSongXuanEasterEggSystem.ObserveNativeBirth(__result, pParent1, pParent2);
 		XjZhangYanEasterEggSystem.ObserveNativeBirth(__result, pParent1, pParent2);
+		XjYaoShuSapientSpecies.ObserveNativeBirth(__result, pParent1, pParent2);
 	}
 }

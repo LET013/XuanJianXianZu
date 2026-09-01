@@ -29,6 +29,17 @@ internal static class XjRealmTitleNameLibrary
 		"玉京", "寂照", "玄景", "昭明", "道枢", "元和"
 	};
 
+	// 金性与君号的首尾只取中性器物、仪仗、居处意象；绝不再把本道途的
+	// 字符放入候选池。道途仅在金性的中核由规则写入一次，果位 ID 则继续
+	// 保持“道途+位序”以兼容存档和持位索引。
+	private static readonly string[] NeutralHighRealmImagePairs =
+	{
+		"瑶台", "琼阙", "绛帷", "兰舟", "玉珂", "珠帘", "烟萝", "鹤驾",
+		"凤箫", "云旆", "璧宫", "芝庭", "华盖", "霓裳", "琅函", "彤管",
+		"锦帙", "松醪", "菱歌", "蓬壶", "冰壶", "星槎", "月榭", "鹊楼",
+		"琴心", "书绡", "花朝", "茗碗", "清樽", "香篆", "画舫", "金钗"
+	};
+
 	private static readonly string[] JieLinFirstTitleWords =
 	{
 		"广寒", "湖月", "夜光", "太素", "月府", "素魄", "玄珠", "清辉",
@@ -357,7 +368,7 @@ internal static class XjRealmTitleNameLibrary
 			return string.Empty;
 		}
 
-		// 尊号收束为四字本道途意象，再落二字君号；不拼接太初、玄景、道枢等泛化大词。
+		// 君号固定“六字尊号 + 二字君号”；六字不再拼本道途字，避免与金性中核重叠。
 		string stem = GenerateDaoHaoStem(normalizedDaoTu, actorId);
 		string suffix = PickJinDanSuffix(actorId, normalizedDaoTu);
 		string candidate = stem + suffix;
@@ -366,29 +377,23 @@ internal static class XjRealmTitleNameLibrary
 			return candidate;
 		}
 
-		// 无论字库审计是否命中，金丹/真君尊号都必须保持“四字道号 + 二字君号”。
-		// 不退回“本道途二字 + 君号”的四字旧格式。
+		// 无论字库审计是否命中，金丹/真君尊号都必须保持“六字尊号 + 二字君号”。
 		return stem + suffix;
 	}
 
 	/// <summary>
-	/// 真君尊号固定为“四字道号 + 二字君号”的六字格。四字均取本道途字库，
-	/// 只扩展道号，不借太上、太初等泛化大词，也不碰既有君号分支。
+	/// 真君尊号固定为“六字尊号 + 二字君号”的八字格。六字均取中性意象池，
+	/// 不借本道途文字，也不触碰既有玄君/神君/真君/元君/飞君分支。
 	/// </summary>
 	internal static string GenerateDaoHaoStem(string daoTu, long actorId)
 	{
 		string normalizedDaoTu = NormalizeDaoTu(daoTu);
 		if (string.IsNullOrWhiteSpace(normalizedDaoTu)) return string.Empty;
-		if (TryGetExactTitleProfile(normalizedDaoTu, out DaoTuTitleProfile profile)
-			&& profile.DoubleWords.Length > 0)
-		{
-			string first = TakeTwo(Pick(profile.DoubleWords, actorId, normalizedDaoTu + "|zunhao-stem|v5|0"));
-			string second = TakeTwo(PickDistinctComponent(profile.DoubleWords, first, actorId + 37L, normalizedDaoTu + "|zunhao-stem|v5|1"));
-			return first + second;
-		}
-		string fallbackFirst = Pick(new[] { "抱一", "含真", "寂照", "元和", "清虚", "道枢" }, actorId, normalizedDaoTu + "|zunhao-fallback|v4|0");
-		string fallbackSecond = PickDistinctComponent(new[] { "抱一", "含真", "寂照", "元和", "清虚", "道枢" }, fallbackFirst, actorId + 31L, normalizedDaoTu + "|zunhao-fallback|v4|1");
-		return TakeTwo(fallbackFirst) + TakeTwo(fallbackSecond);
+		string salt = normalizedDaoTu + "|zunhao-neutral|v6";
+		string first = PickNeutralHighRealmPair(normalizedDaoTu, actorId, salt + "|0", string.Empty);
+		string second = PickNeutralHighRealmPair(normalizedDaoTu, actorId + 37L, salt + "|1", first);
+		string third = PickNeutralHighRealmPair(normalizedDaoTu, actorId + 71L, salt + "|2", first + second);
+		return first + second + third;
 	}
 
 	/// <summary>
@@ -424,17 +429,11 @@ internal static class XjRealmTitleNameLibrary
 			? normalizedDaoTu
 			: TakeTwo(!string.IsNullOrWhiteSpace(externalDaoTu) ? externalDaoTu : primaryAuthority);
 		if (string.IsNullOrWhiteSpace(body)) return string.Empty;
-		if (TryGetExactTitleProfile(normalizedDaoTu, out DaoTuTitleProfile profile)
-			&& profile.SingleWords.Length > 1)
-		{
-			// 尊号专用双字意象与金性专用单字对严格分池：例如尊号可有“双焰”，
-			// 金性绝不会再把“双焰”作为首尾意象，二者不再同词相撞。
-			string salt = normalizedDaoTu + "|jinxing|" + (positionType ?? string.Empty) + "|" + Math.Max(1, slot) + "|v6";
-			string first = PickJinXingPair(profile, seed, salt + "|head", string.Empty);
-			string last = PickJinXingPair(profile, seed + 23L, salt + "|tail", first);
-			return first + body + last;
-		}
-		return "清衡" + body + "守素";
+		// 保留中间本道途；首尾均过滤本道途字符，避免“青荣集木木青性”式重复。
+		string salt = normalizedDaoTu + "|jinxing-neutral|" + (positionType ?? string.Empty) + "|" + Math.Max(1, slot) + "|v7";
+		string first = PickNeutralHighRealmPair(normalizedDaoTu, seed, salt + "|head", string.Empty);
+		string last = PickNeutralHighRealmPair(normalizedDaoTu, seed + 23L, salt + "|tail", first);
+		return first + body + last;
 	}
 
 	/// <summary>
@@ -446,6 +445,14 @@ internal static class XjRealmTitleNameLibrary
 		string normalizedDaoTu = NormalizeDaoTu(daoTu);
 		string value = (jinXing ?? string.Empty).Trim();
 		if (string.IsNullOrWhiteSpace(normalizedDaoTu) || !value.EndsWith("性", StringComparison.Ordinal)) return false;
+		string legacyStem = value.Substring(0, value.Length - 1);
+		int daoTuIndex = legacyStem.IndexOf(normalizedDaoTu, StringComparison.Ordinal);
+		if (daoTuIndex >= 0)
+		{
+			string head = legacyStem.Substring(0, daoTuIndex);
+			string tail = legacyStem.Substring(daoTuIndex + normalizedDaoTu.Length);
+			if (ContainsDaoTuCharacter(head, normalizedDaoTu) || ContainsDaoTuCharacter(tail, normalizedDaoTu)) return true;
+		}
 		if (!TryGetExactTitleProfile(normalizedDaoTu, out DaoTuTitleProfile profile)
 			|| profile.DoubleWords.Length == 0) return false;
 		string salt = normalizedDaoTu + "|jinxing|" + XjGuoWeiCalculator.ZhengWei + "|1|v5";
@@ -562,9 +569,10 @@ internal static class XjRealmTitleNameLibrary
 	{
 		string first = Pick(JieLinFirstTitleWords, actorId, "taiyin|jielin|0");
 		string second = PickDistinctComponent(JieLinSecondTitleWords, first, actorId + 1L, "taiyin|jielin|1");
+		string third = PickDistinctComponent(JieLinSecondTitleWords, first + second, actorId + 29L, "taiyin|jielin|2");
 		string suffix = PickJieLinSuffix(actorId);
-		string title = first + second + suffix;
-		return ContainsRealmTitleWord(title) ? "广寒清辉" + suffix : title;
+		string title = first + second + third + suffix;
+		return ContainsRealmTitleWord(title) ? "广寒清辉抱月" + suffix : title;
 	}
 
 	private static string PickJieLinSuffix(long actorId)
@@ -780,6 +788,30 @@ internal static class XjRealmTitleNameLibrary
 		string fallbackFirst = TakeTwo(Pick(profile.SingleWords, actorId, salt + "|fallback0"));
 		string fallbackSecond = TakeTwo(PickDistinctComponent(profile.SingleWords, fallbackFirst, actorId + 17L, salt + "|fallback1"));
 		return fallbackFirst + fallbackSecond;
+	}
+
+	private static string PickNeutralHighRealmPair(string daoTu, long actorId, string salt, string used)
+	{
+		int start = XjDeterministicHash.PositiveIndex(actorId, salt, NeutralHighRealmImagePairs.Length);
+		for (int offset = 0; offset < NeutralHighRealmImagePairs.Length; offset++)
+		{
+			string candidate = NeutralHighRealmImagePairs[(start + offset) % NeutralHighRealmImagePairs.Length];
+			if (candidate.Length != 2
+				|| ContainsDaoTuCharacter(candidate, daoTu)
+				|| (!string.IsNullOrEmpty(used) && used.IndexOf(candidate, StringComparison.Ordinal) >= 0)) continue;
+			return candidate;
+		}
+		return "瑶台";
+	}
+
+	private static bool ContainsDaoTuCharacter(string value, string daoTu)
+	{
+		if (string.IsNullOrWhiteSpace(value) || string.IsNullOrWhiteSpace(daoTu)) return false;
+		for (int i = 0; i < daoTu.Length; i++)
+		{
+			if (value.IndexOf(daoTu[i]) >= 0) return true;
+		}
+		return false;
 	}
 
 	private static bool ContainsExact(string[] values, string candidate)
@@ -1458,12 +1490,11 @@ internal static class XjRealmTitleApplyService
 	private static bool IsSixCharacterHighRealmTitle(string title)
 	{
 		string value = (title ?? string.Empty).Trim();
-		// 张衍、宋玄的“景寂/曲直”是玩家指定的角色道号前缀，不能为了
-		// 通用六字格把这两个彩蛋尊号反复改写。
+		// 君号现统一为六字尊号加二字后缀；张衍、宋玄也在各自前缀内收束为此格。
 		if ((value.StartsWith("景寂", StringComparison.Ordinal)
 			|| value.StartsWith("曲直", StringComparison.Ordinal))
-			&& HasHighRealmTitleSuffix(value)) return true;
-		return value.Length == 6 && HasHighRealmTitleSuffix(value);
+			&& value.Length == 8 && HasHighRealmTitleSuffix(value)) return true;
+		return value.Length == 8 && HasHighRealmTitleSuffix(value);
 	}
 
 	private static string ReplaceHighRealmTitleSuffix(string title, string suffix)

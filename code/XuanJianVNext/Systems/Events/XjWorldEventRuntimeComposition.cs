@@ -24,6 +24,7 @@ internal static class XjWorldEventRuntimeComposition
 				XjWorldEventCatalog.ScheduleAfterLoad(currentYear);
 				XjHongXiaLuoXiaEvent.ReconcileAfterLoad(currentYear);
 				XjYaoShuGreatSageSystem.ReconcileAfterLoad(currentYear);
+				XjYaoShuSapientSpecies.ReconcileAfterLoad(currentYear);
 			},
 			XjWorldEventCatalog.ClearRuntime);
 		XjFeatureRegistration.ArchiveDocument(
@@ -38,6 +39,12 @@ internal static class XjWorldEventRuntimeComposition
 			1,
 			XjYaoShuGreatSageSystem.ExportPayload,
 			XjYaoShuGreatSageSystem.ImportPayload);
+		XjFeatureRegistration.ArchiveDocument(
+			XjYaoShuSapientSpecies.ModuleId,
+			68,
+			1,
+			XjYaoShuSapientSpecies.ExportPayload,
+			XjYaoShuSapientSpecies.ImportPayload);
 		XjFeatureRegistration.BackgroundLane(
 			"background.opening-events",
 			4,
@@ -55,5 +62,6 @@ internal static class XjWorldEventRuntimeComposition
 		XjWorldEventCatalog.ClearRuntime();
 		XjHongXiaLuoXiaEvent.ClearRuntime();
 		XjYaoShuGreatSageSystem.ClearRuntime();
+		XjYaoShuSapientSpecies.ClearRuntime();
 	}
 }

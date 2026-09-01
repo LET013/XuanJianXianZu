@@ -338,7 +338,7 @@ private static string ResolveTraitDisplayName(ActorTrait trait)
 			case "XjRealm2": return "炼气境";
 			case "XjRealm3": return "筑基境";
 			case "XjRealm4": return "紫府境";
-			case "XjRealm5": return "金丹境";
+			case "XjRealm5": return "金丹·真君";
 			case "XjRealm6": return "道胎境";
 			case "XjRealm11": return "黄冠境";
 			case "XjRealm12": return "真人境";

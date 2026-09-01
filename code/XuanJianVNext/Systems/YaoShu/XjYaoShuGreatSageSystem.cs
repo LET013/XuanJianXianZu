@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
+using Newtonsoft.Json;
 using UnityEngine;
 using XuanJianVNext.Core;
 using XuanJianVNext.Data.History;
@@ -24,7 +25,7 @@ namespace XuanJianVNext.Systems.YaoShu;
 ///
 /// 设计边界：
 /// - 不创建新文明种族，不接入玄鉴普通修炼、家族、宗门、百艺流水线；
-/// - 世界三百年后，十二个固定槽位仅在各自正位空缺时，每五十年作一次五成化生判定；
+/// - 世界三百年后，十二个固定槽位按各自果位映照，每五十年作一次五成化生判定；
 /// - 活着时绝不重复生成；年度工作量固定O(12)，不扫描全世界Actor；
 /// - 生物本体使用WorldBox原生ActorAsset克隆与spawnNewUnit创建，保留原生AI/空间容器生命周期。
 /// </summary>
@@ -96,8 +97,12 @@ internal static class XjYaoShuGreatSageSystem
 		"egg_orb",
 		"fins"
 	};
-	private static long _sharedGreatSageSubspeciesId = -1L;
-	private static Subspecies _sharedGreatSageSubspecies;
+	// Subspecies 在 WorldBox 中隶属于具体 ActorAsset。十二圣虽然共用“妖属大圣”亚种特质与显示名，
+	// 但绝不能把第一只大圣创建出的 Subspecies 对象强塞给另外十一种 ActorAsset；
+	// 这会破坏 actor.asset <-> subspecies.getActorAsset() 的原生不变量，并可在人物面板
+	// UnitStatsElement / 预渲染阶段制造空引用。每个大圣 ActorAsset 只复用自己的原生亚种。
+	private static readonly Dictionary<string, Subspecies> RuntimeSubspeciesByAssetId =
+		new Dictionary<string, Subspecies>(StringComparer.Ordinal);
 
 	private sealed class Definition
 	{
@@ -143,6 +148,8 @@ internal static class XjYaoShuGreatSageSystem
 	{
 		internal Sprite[] Idle;
 		internal Sprite[] Walk;
+		internal Sprite[] Breathing;
+		internal Sprite[] Run;
 		internal Sprite[] Attack;
 		internal Sprite Fallback;
 	}
@@ -154,6 +161,7 @@ internal static class XjYaoShuGreatSageSystem
 		internal string Skill;
 		internal string YaoMin;
 		internal string Fruit;
+		internal int YaoMinPopulation;
 		internal bool Alive;
 		internal int ManifestationCount;
 		internal int LastManifestationYear;
@@ -290,9 +298,20 @@ internal static class XjYaoShuGreatSageSystem
 	private static readonly Dictionary<long, float> NextSkillAt = new Dictionary<long, float>(12);
 	private static readonly Dictionary<long, float> AttackAnimationStartedAt = new Dictionary<long, float>(12);
 	private static readonly Dictionary<string, GreatSageVisualFrames> VisualFramesByAssetId = new Dictionary<string, GreatSageVisualFrames>(StringComparer.Ordinal);
+	// 排行榜不能只依赖“普通修士缓存最终一致性”。十二圣只有十二席，直接维护稳定 ID 小集合，
+	// 榜单构建时与普通修士 ID 合并即可；不缓存 Actor 引用，也不扫描 World.units。
+	private static readonly HashSet<long> RankActorIds = new HashSet<long>();
+	private static long[] _rankActorIdSnapshot = Array.Empty<long>();
+	private static bool _rankActorIdSnapshotDirty = true;
+	private static int _rankMembershipRevision;
+	private static bool _rankRegistryRecoveryPending = true;
+	private static bool _legacyWorldRecoveryPending = true;
+	private static int _reconcileDepartureGraceThroughYear = -1;
 	private static readonly AttackAction GreatSageAttackAction = OnGreatSageAttackTarget;
 	private static bool _assetsInitialized;
 	private static bool _reconciledAfterLoad;
+
+	internal static int RankMembershipRevision => _rankMembershipRevision;
 
 	internal static void Init()
 	{
@@ -315,7 +334,6 @@ internal static class XjYaoShuGreatSageSystem
 		if (!_assetsInitialized) Init();
 		if (World.world?.units == null || !_assetsInitialized) return;
 
-		HashSet<string> occupiedFruitIds = BuildOccupiedFruitSet();
 		bool changed = false;
 		for (int i = 0; i < Definitions.Length; i++)
 		{
@@ -341,6 +359,7 @@ internal static class XjYaoShuGreatSageSystem
 
 			if (state.ActorId > 0L)
 			{
+				if (currentYear <= _reconcileDepartureGraceThroughYear) continue;
 				long departedActorId = state.ActorId;
 				NextAttackCueAt.Remove(departedActorId);
 				NextSkillAt.Remove(departedActorId);
@@ -362,9 +381,9 @@ internal static class XjYaoShuGreatSageSystem
 				|| !CanAttemptManifestation(definition)) continue;
 
 			string fruitId = definition.FruitId;
-			if (occupiedFruitIds.Contains(NormalizeFruit(fruitId))
-				|| XjFruitPositionWorldState.IsDaoTaiSecondaryOccupied(fruitId)
-				|| XjGuoWeiRegistry.IsPermanentlyLockedGuoWei(fruitId))
+			// 大圣是果位“映照化生”，不是正位持有人：普通修士/道胎次位占用不得阻止大圣，
+			// 也不得被大圣反向占座。只有果位本身被永久封锁时暂停化生。
+			if (XjGuoWeiRegistry.IsPermanentlyLockedGuoWei(fruitId))
 			{
 				state.NextAttemptYear = ScheduleNextAttempt(definition, currentYear);
 				changed = true;
@@ -385,7 +404,6 @@ internal static class XjYaoShuGreatSageSystem
 				state.LastStrategicYear = currentYear;
 				state.LastManifestationYear = currentYear;
 				state.ManifestationCount++;
-				occupiedFruitIds.Add(NormalizeFruit(fruitId));
 				changed = true;
 				XjYaoShuSapientSpecies.TryAwakenForGreatSage(definition.SlotId, manifested.current_tile, currentYear);
 				RecordManifestation(manifested, definition, currentYear);
@@ -404,8 +422,12 @@ internal static class XjYaoShuGreatSageSystem
 	{
 		currentYear = Math.Max(0, currentYear);
 		_reconciledAfterLoad = true;
+		_reconcileDepartureGraceThroughYear = Math.Max(_reconcileDepartureGraceThroughYear, currentYear);
 		if (!_assetsInitialized) Init();
-		bool changed = false;
+		// 仅在载档/新世界初始化的冷路径做一次旧0.9.11兼容恢复。该版本曾把仍存活的
+		// 大圣槽位误清为0，单靠 ActorId 已无法找回；这里允许一次 getSimpleList()，随后
+		// 运行态仍完全回到十二席ID + ActorRegistry，不进入年度/UI热路径扫描。
+		bool changed = RecoverLegacyLivingSagesFromWorldCold(currentYear);
 		for (int i = 0; i < Definitions.Length; i++)
 		{
 			SlotState state = States[i];
@@ -422,11 +444,10 @@ internal static class XjYaoShuGreatSageSystem
 			}
 			if (state.ActorId > 0L)
 			{
-				state.ActorId = 0L;
-				state.LastStrategicYear = 0;
-				state.LastDepartureYear = currentYear;
-				state.NextAttemptYear = ScheduleReentryAttempt(currentYear);
-				changed = true;
+				// 载档恢复阶段不以一次 Resolve miss 宣判大圣死亡。WorldBox 的单位索引与
+				// Mod ActorRegistry 可能仍在回填；真正的离世判断交给后续年度 Tick，
+				// 避免把仍存活 Actor 的权威槽位提前清成 0。
+				continue;
 			}
 			if (state.NextAttemptYear <= 0)
 			{
@@ -439,7 +460,7 @@ internal static class XjYaoShuGreatSageSystem
 
 	/// <summary>
 	/// 陆江仙模拟器使用的一次性检验入口：跳过三百年门槛、五十年节拍与五成掷骰，
-	/// 但仍严格尊重活着的大圣及普通修士已经占用的正位。
+	/// 仍尊重果位永久封锁；普通修士正位与大圣映照可以并存。
 	/// </summary>
 	internal static int TryDebugManifestAll(int currentYear)
 	{
@@ -448,7 +469,6 @@ internal static class XjYaoShuGreatSageSystem
 		if (!_assetsInitialized) Init();
 		if (World.world?.units == null || !_assetsInitialized) return 0;
 
-		HashSet<string> occupiedFruitIds = BuildOccupiedFruitSet();
 		int manifestedCount = 0;
 		bool changed = false;
 		for (int i = 0; i < Definitions.Length; i++)
@@ -464,6 +484,7 @@ internal static class XjYaoShuGreatSageSystem
 
 			if (state.ActorId > 0L)
 			{
+				if (currentYear <= _reconcileDepartureGraceThroughYear) continue;
 				long departedActorId = state.ActorId;
 				NextAttackCueAt.Remove(departedActorId);
 				NextSkillAt.Remove(departedActorId);
@@ -479,9 +500,7 @@ internal static class XjYaoShuGreatSageSystem
 			if (!CanAttemptManifestation(definition)) continue;
 
 			string fruitId = definition.FruitId;
-			if (occupiedFruitIds.Contains(NormalizeFruit(fruitId))
-				|| XjFruitPositionWorldState.IsDaoTaiSecondaryOccupied(fruitId)
-				|| XjGuoWeiRegistry.IsPermanentlyLockedGuoWei(fruitId))
+			if (XjGuoWeiRegistry.IsPermanentlyLockedGuoWei(fruitId))
 			{
 				state.NextAttemptYear = ScheduleNextAttempt(definition, currentYear);
 				changed = true;
@@ -495,7 +514,6 @@ internal static class XjYaoShuGreatSageSystem
 				state.LastStrategicYear = currentYear;
 				state.LastManifestationYear = currentYear;
 				state.ManifestationCount++;
-				occupiedFruitIds.Add(NormalizeFruit(fruitId));
 				manifestedCount++;
 				changed = true;
 				XjYaoShuSapientSpecies.TryAwakenForGreatSage(definition.SlotId, manifested.current_tile, currentYear);
@@ -513,20 +531,10 @@ internal static class XjYaoShuGreatSageSystem
 	}
 
 	/// <summary>
-	/// 果位注册表的外部占位探针。大圣不伪装成金丹，因此不写JinDan/GuoWeiRegistry；
-	/// 仅在对应大圣真实存活时把该正位视为被果位化生占据。
+	/// 大圣只是果位映照，不占修士正位席次。保留该 API 供旧调用点兼容，但永远不作为
+	/// GuoWeiRegistry 的外部占位源。果位永久封锁仍由注册表自身处理。
 	/// </summary>
-	internal static bool IsExternalPositionOccupied(string guoWei)
-	{
-		string normalized = NormalizeFruit(guoWei);
-		if (normalized.Length == 0) return false;
-		for (int i = 0; i < Definitions.Length; i++)
-		{
-			if (!string.Equals(normalized, NormalizeFruit(Definitions[i].FruitId), StringComparison.Ordinal)) continue;
-			return TryResolveLivingSage(Definitions[i], States[i].ActorId, out _);
-		}
-		return false;
-	}
+	internal static bool IsExternalPositionOccupied(string guoWei) => false;
 
 	internal static string ExportPayload()
 	{
@@ -567,15 +575,21 @@ internal static class XjYaoShuGreatSageSystem
 				States[i].ManifestationCount = Math.Max(0, countValue);
 		}
 		_reconciledAfterLoad = false;
+		_rankRegistryRecoveryPending = true;
+		_legacyWorldRecoveryPending = true;
 	}
 
 	/// <summary>
-	/// 修士榜打开时的固定十二席回填。只按已有槽位 id 取 Actor，不枚举世界单位。
+	/// 修士榜打开时的固定十二席回填。正常路径只按已有槽位 id 取 Actor；
+	/// 对 0.9.11 早期包已经出现“Actor 仍活着但槽位被误清”的旧运行态，仅在载档后
+	/// 第一次打开榜单时从玄鉴 ActorRegistry 做一次迁移恢复，不枚举 World.units。
 	/// </summary>
 	internal static void EnsureRankMembership()
 	{
 		if (World.world?.units == null) return;
 		int currentYear = Math.Max(0, World.world.map_stats?.year ?? 0);
+		if (!_reconciledAfterLoad) ReconcileAfterLoad(currentYear);
+		RecoverLegacyLivingSagesFromRegistry(currentYear);
 		for (int i = 0; i < Definitions.Length; i++)
 		{
 			Definition definition = Definitions[i];
@@ -583,7 +597,116 @@ internal static class XjYaoShuGreatSageSystem
 			EnsureGreatSageIdentity(sage, definition, currentYear);
 			XjActorRegistry.Register(sage, out _);
 			XjCultivatorCache.CheckAndUpdate(sage);
+			TrackRankActor(GetActorId(sage));
 		}
+	}
+
+	internal static IReadOnlyList<long> GetRankActorIds()
+	{
+		if (_rankActorIdSnapshotDirty)
+		{
+			_rankActorIdSnapshot = new long[RankActorIds.Count];
+			RankActorIds.CopyTo(_rankActorIdSnapshot);
+			Array.Sort(_rankActorIdSnapshot);
+			_rankActorIdSnapshotDirty = false;
+		}
+		return _rankActorIdSnapshot;
+	}
+
+	private static bool RecoverLegacyLivingSagesFromWorldCold(int currentYear)
+	{
+		if (!_legacyWorldRecoveryPending) return false;
+		IReadOnlyList<Actor> units = World.world?.units?.getSimpleList();
+		if (units == null || units.Count == 0) return false;
+		_legacyWorldRecoveryPending = false;
+
+		bool changed = false;
+		for (int i = 0; i < units.Count; i++)
+		{
+			Actor actor = units[i];
+			if (!XjSafeCore.IsAliveActor(actor) || !TryFindDefinition(actor, out Definition definition)) continue;
+			int slotIndex = FindDefinitionIndex(definition.ActorAssetId);
+			if (slotIndex < 0) continue;
+			long actorId = GetActorId(actor);
+			if (actorId <= 0L) continue;
+
+			SlotState state = States[slotIndex];
+			if (state.ActorId > 0L && TryResolveLivingSage(definition, state.ActorId, out Actor alreadyBound))
+			{
+				if (GetActorId(alreadyBound) != actorId) continue;
+			}
+			else if (state.ActorId != actorId)
+			{
+				state.ActorId = actorId;
+				state.NextAttemptYear = 0;
+				state.LastStrategicYear = Math.Max(state.LastStrategicYear, currentYear);
+				changed = true;
+			}
+
+			EnsureGreatSageIdentity(actor, definition, currentYear);
+			EnsureGreatSageAttackCallback(actor);
+			XjActorRegistry.Register(actor, out _);
+			TrackRankActor(actorId);
+		}
+		return changed;
+	}
+
+	private static void RecoverLegacyLivingSagesFromRegistry(int currentYear)
+	{
+		if (!_rankRegistryRecoveryPending || XjActorRegistry.Count <= 0) return;
+		_rankRegistryRecoveryPending = false;
+		IReadOnlyList<Actor> known = XjActorRegistry.Snapshot();
+		bool changed = false;
+		for (int i = 0; i < known.Count; i++)
+		{
+			Actor actor = known[i];
+			if (!XjSafeCore.IsAliveActor(actor) || !TryFindDefinition(actor, out Definition definition)) continue;
+			int slotIndex = FindDefinitionIndex(definition.ActorAssetId);
+			if (slotIndex < 0) continue;
+			long actorId = GetActorId(actor);
+			if (actorId <= 0L) continue;
+			SlotState state = States[slotIndex];
+			if (state.ActorId <= 0L)
+			{
+				state.ActorId = actorId;
+				state.NextAttemptYear = 0;
+				state.LastStrategicYear = Math.Max(state.LastStrategicYear, currentYear);
+				changed = true;
+			}
+			else if (state.ActorId != actorId)
+			{
+				// 一个槽位只承认一个权威 Actor；旧包意外残留的重复实例不进入十二圣榜单。
+				continue;
+			}
+			EnsureGreatSageIdentity(actor, definition, currentYear);
+			EnsureGreatSageAttackCallback(actor);
+			TrackRankActor(actorId);
+		}
+		if (changed) MarkChanged();
+	}
+
+	private static int FindDefinitionIndex(string actorAssetId)
+	{
+		if (string.IsNullOrWhiteSpace(actorAssetId)) return -1;
+		for (int i = 0; i < Definitions.Length; i++)
+		{
+			if (string.Equals(Definitions[i].ActorAssetId, actorAssetId, StringComparison.Ordinal)) return i;
+		}
+		return -1;
+	}
+
+	private static void TrackRankActor(long actorId)
+	{
+		if (actorId <= 0L || !RankActorIds.Add(actorId)) return;
+		_rankActorIdSnapshotDirty = true;
+		unchecked { _rankMembershipRevision++; }
+	}
+
+	private static void RemoveRankActor(long actorId)
+	{
+		if (actorId <= 0L || !RankActorIds.Remove(actorId)) return;
+		_rankActorIdSnapshotDirty = true;
+		unchecked { _rankMembershipRevision++; }
 	}
 
 	internal static void ClearRuntime()
@@ -599,8 +722,15 @@ internal static class XjYaoShuGreatSageSystem
 		}
 		NextAttackCueAt.Clear();
 		NextSkillAt.Clear();
-		_sharedGreatSageSubspeciesId = -1L;
-		_sharedGreatSageSubspecies = null;
+		AttackAnimationStartedAt.Clear();
+		RankActorIds.Clear();
+		_rankActorIdSnapshot = Array.Empty<long>();
+		_rankActorIdSnapshotDirty = true;
+		unchecked { _rankMembershipRevision++; }
+		_rankRegistryRecoveryPending = true;
+		_legacyWorldRecoveryPending = true;
+		_reconcileDepartureGraceThroughYear = -1;
+		RuntimeSubspeciesByAssetId.Clear();
 		_reconciledAfterLoad = false;
 	}
 
@@ -627,7 +757,15 @@ internal static class XjYaoShuGreatSageSystem
 			asset.civ = false;
 			asset.unit_other = true;
 			asset.use_phenotypes = false;
+			// 对齐龙属与诡秘 StarRiftCreatureAssets 的安全自定义 Actor 元数据：
+			// 非高级纹理、非染色、明确可检查/亚种/翻转，避免模板遗留状态让
+			// UnitStatsElement 或预渲染读取到不完整 texture/species 元数据。
+			asset.has_advanced_textures = false;
+			asset.need_colored_sprite = false;
+			asset.color_hex = "#FFFFFF";
+			asset.color = Toolbox.makeColor(asset.color_hex);
 			asset.has_baby_form = false;
+			asset.can_have_subspecies = true;
 			asset.can_evolve_into_new_species = false;
 			asset.can_turn_into_zombie = false;
 			asset.needs_to_be_explored = false;
@@ -636,16 +774,27 @@ internal static class XjYaoShuGreatSageSystem
 			asset.show_for_unlockables_ui = true;
 			asset.has_soul = true;
 			asset.inspect_home = false;
+			asset.inspect_show_species = false;
 			asset.can_be_inspected = true;
 			asset.visible_on_minimap = false;
-			asset.can_edit_traits = true;
+			// 自定义世界级单位不进入原生 trait-editor 反向打开 UnitWindow 的路径。
+			// 当前 Player.log 的海量 NRE 正发生在该路径的 UnitStatsElement.showContent；
+			// 关闭编辑只影响原生调试编辑入口，不影响正常人物查看、特质展示或玄鉴面板。
+			asset.can_edit_traits = false;
 			asset.can_talk_with = false;
 			asset.control_can_talk = false;
 			asset.use_items = false;
 			asset.take_items = false;
+			asset.can_flip = true;
+			asset.check_flip = delegate { return true; };
+			asset.disable_jump_animation = true;
 			asset.job = new[] { "random_move" };
 			asset.civ_base_cities = 0;
 			asset.kingdom_id_civilization = string.Empty;
+			// 与龙属完全一致：大圣不属于任何文明、城市或势力，但 Actor 必须挂入
+			// 原生 dragons 野生容器，才能获得非空 kingdom、空间分区和 AI 生命周期。
+			// 这不是玩法上的“加入野生王国”，也不会使其加入野生阵营的社交/繁殖逻辑。
+			asset.kingdom_id_wild = "dragons";
 			asset.base_stats["birth_rate"] = 0f;
 			asset.base_stats["lifespan"] = 5000f;
 			asset.actor_size = ActorSize.S17_Dragon;
@@ -687,40 +836,63 @@ internal static class XjYaoShuGreatSageSystem
 	private static void TryConfigureActorVisuals(ActorAssetLibrary library, ActorAsset asset, Definition definition)
 	{
 		if (library == null || asset == null || definition == null) return;
-		// clone 可能继承模板遗留的 has_override_sprite，而该委托不会随存档保存。
-		// 若贴图资源不完整，必须先回退原生渲染，不能留下 true + null delegate 让渲染线程崩溃。
+		// clone 可能继承模板遗留的 override；注册阶段先清空，再完整建立 texture metadata。
+		// 旧实现先读取 attack Sprite、后 loadTexturesAndSprites，导致 attack 帧在首次注册时
+		// 尚未进入 SpriteTextureLoader 缓存，VisualFramesByAssetId 永久保存了一组 null。
 		asset.has_override_sprite = false;
 		asset.get_override_sprite = null;
-		GreatSageVisualFrames frames = BuildGreatSageVisualFrames(definition);
-		Sprite banner = frames.Fallback;
-		if (banner == null)
-		{
-			Debug.LogWarning("[玄鉴][妖属大圣] 未找到贴图，保留原生外观 " + definition.SlotId);
-			return;
-		}
+		VisualFramesByAssetId.Remove(definition.ActorAssetId);
 
 		try
 		{
-			string basePath = SpritePathRoot + definition.ActorAssetId + "/";
+			string mainPath = GetMainSpritePath(definition);
 			asset.texture_id = definition.ActorAssetId;
-			asset.texture_asset = new ActorTextureSubAsset(basePath, false);
+			asset.texture_asset = new ActorTextureSubAsset(mainPath, false);
+			if (asset.texture_asset != null)
+			{
+				// 对齐诡秘 StarRiftCreatureAssets：显式指定实际 main 目录，避免非高级
+				// ActorTextureSubAsset 继续猜 male_1/heads_male 而得到空动画容器。
+				asset.texture_asset.texture_path_main = mainPath.TrimEnd('/', '\\');
+			}
 			asset.animation_walk = BuildAnimationNames("walk_");
 			asset.animation_idle = BuildAnimationNames("idle_");
+			asset.animation_swim = asset.animation_walk;
 			asset.animation_walk_speed = 6f;
 			asset.animation_idle_speed = 6f;
+			asset.animation_swim_speed = 6f;
 			asset.animation_speed_based_on_walk_speed = false;
+			asset._cached_sprite = null;
+			asset.cached_sprite = null;
+
+			// 必须先让 ActorAssetLibrary 建立该目录的基础动画，再缓存大圣专属 attack/run/breathing。
 			library.loadTexturesAndSprites(asset);
+			PrimeSpriteDirectory(definition);
+			GreatSageVisualFrames frames = BuildGreatSageVisualFrames(definition);
+			Sprite banner = frames.Fallback;
+			if (banner == null)
+			{
+				Debug.LogWarning("[玄鉴][妖属大圣] 未找到贴图，保留原生外观 " + definition.SlotId);
+				return;
+			}
+
 			asset._cached_sprite = banner;
 			asset.cached_sprite = banner;
 			VisualFramesByAssetId[definition.ActorAssetId] = frames;
-			// 原生的 animation_container 只认识 idle/walk；大圣的源素材另有完整 attack 序列。
-			// 因此只在本 Actor 自己的命中窗口覆写当前帧，不能再把所有状态硬塞为 walk_0~5。
 			asset.get_override_sprite = actor => GetGreatSageOverrideSprite(definition, actor);
 			asset.has_override_sprite = true;
+
+			if (frames.Attack == null || frames.Attack.Length < definition.AttackFrameCount)
+			{
+				Debug.LogWarning("[玄鉴][妖属大圣] attack帧未完整载入 " + definition.SlotId
+					+ " expected=" + definition.AttackFrameCount
+					+ " loaded=" + (frames.Attack?.Length ?? 0));
+			}
 		}
 		catch (Exception ex)
 		{
 			asset.has_override_sprite = false;
+			asset.get_override_sprite = null;
+			VisualFramesByAssetId.Remove(definition.ActorAssetId);
 			Debug.LogWarning("[玄鉴][妖属大圣] 贴图加载跳过 " + definition.SlotId + ": " + ex.GetType().Name);
 		}
 	}
@@ -738,7 +910,9 @@ internal static class XjYaoShuGreatSageSystem
 		{
 			Idle = new Sprite[SpriteFrameCount],
 			Walk = new Sprite[SpriteFrameCount],
-			Attack = new Sprite[Math.Max(0, definition?.AttackFrameCount ?? 0)]
+			Breathing = Array.Empty<Sprite>(),
+			Run = Array.Empty<Sprite>(),
+			Attack = Array.Empty<Sprite>()
 		};
 		if (definition == null) return frames;
 
@@ -747,14 +921,54 @@ internal static class XjYaoShuGreatSageSystem
 			frames.Idle[i] = TryLoadSprite(GetSpritePath(definition, "idle_" + i));
 			frames.Walk[i] = TryLoadSprite(GetSpritePath(definition, "walk_" + i));
 		}
-		for (int i = 0; i < frames.Attack.Length; i++)
-		{
-			frames.Attack[i] = TryLoadSprite(GetSpritePath(
-				definition,
-				definition.VisualPrefix + "_attack_" + i.ToString("D3", CultureInfo.InvariantCulture)));
-		}
-		frames.Fallback = frames.Idle[0] ?? frames.Walk[0];
+		frames.Breathing = LoadPrefixedSequence(definition, "breathing", 48);
+		frames.Run = LoadPrefixedSequence(definition, "run", 24);
+		frames.Attack = LoadPrefixedSequence(definition, "attack", Math.Max(0, definition.AttackFrameCount));
+		frames.Fallback = FirstNonNull(frames.Idle)
+			?? FirstNonNull(frames.Breathing)
+			?? FirstNonNull(frames.Walk)
+			?? FirstNonNull(frames.Run)
+			?? FirstNonNull(frames.Attack);
 		return frames;
+	}
+
+	private static Sprite[] LoadPrefixedSequence(Definition definition, string action, int expectedOrMaximum)
+	{
+		if (definition == null || string.IsNullOrWhiteSpace(action) || expectedOrMaximum <= 0) return Array.Empty<Sprite>();
+		List<Sprite> result = new List<Sprite>(expectedOrMaximum);
+		for (int i = 0; i < expectedOrMaximum; i++)
+		{
+			Sprite sprite = TryLoadSprite(GetSpritePath(
+				definition,
+				definition.VisualPrefix + "_" + action + "_" + i.ToString("D3", CultureInfo.InvariantCulture)));
+			if (sprite == null)
+			{
+				// attack 使用精确帧数，其他序列使用上限探测；素材均从 000 连续编号。
+				if (!string.Equals(action, "attack", StringComparison.Ordinal)) break;
+				continue;
+			}
+			result.Add(sprite);
+		}
+		return result.ToArray();
+	}
+
+	private static Sprite FirstNonNull(Sprite[] frames)
+	{
+		if (frames == null) return null;
+		for (int i = 0; i < frames.Length; i++) if (frames[i] != null) return frames[i];
+		return null;
+	}
+
+	private static void PrimeSpriteDirectory(Definition definition)
+	{
+		if (definition == null) return;
+		try
+		{
+			// getSpriteList 会让 NeoModLoader 的 GameResources 目录进入同一 Sprite 缓存；
+			// 返回顺序不参与业务，只用于确保 attack/run/breathing 这些非原生动画名可按路径读取。
+			SpriteTextureLoader.getSpriteList(GetMainSpritePath(definition).TrimEnd('/'), false);
+		}
+		catch { }
 	}
 
 	private static Sprite GetGreatSageOverrideSprite(Definition definition, Actor actor)
@@ -765,27 +979,88 @@ internal static class XjYaoShuGreatSageSystem
 		{
 			return actor?.asset?._cached_sprite ?? actor?.asset?.cached_sprite;
 		}
+
 		long actorId = GetActorId(actor);
-		if (actorId > 0L
-			&& AttackAnimationStartedAt.TryGetValue(actorId, out float startedAt)
-			&& definition.AttackFrameCount > 0)
+		if (actorId > 0L && AttackAnimationStartedAt.TryGetValue(actorId, out float startedAt))
 		{
 			float elapsed = Mathf.Max(0f, Time.time - startedAt);
 			int attackIndex = Mathf.FloorToInt(elapsed / AttackAnimationFrameSeconds);
-			if (attackIndex >= 0 && attackIndex < frames.Attack.Length)
+			if (attackIndex >= 0 && attackIndex < (frames.Attack?.Length ?? 0))
 			{
 				Sprite attack = frames.Attack[attackIndex];
 				if (attack != null) return attack;
 			}
 		}
 
-		int actorOffset = (int)(Math.Abs(actorId) % SpriteFrameCount);
-		int index = Math.Abs(Time.frameCount / 10 + actorOffset) % SpriteFrameCount;
-		return frames.Idle[index]
-				?? frames.Walk[index]
-				?? frames.Fallback
-				?? actor?.asset?._cached_sprite
-				?? actor?.asset?.cached_sprite;
+		bool moving = false;
+		try { moving = actor != null && (actor.is_moving || actor.isUsingPath()); }
+		catch { }
+		Sprite[] sequence = moving && frames.Run?.Length > 0
+			? frames.Run
+			: (!moving && frames.Breathing?.Length > 0
+				? frames.Breathing
+				: (moving ? frames.Walk : frames.Idle));
+		if (sequence == null || sequence.Length == 0) sequence = moving ? frames.Walk : frames.Idle;
+		if (sequence != null && sequence.Length > 0)
+		{
+			int actorOffset = (int)(Math.Abs(actorId) % Math.Max(1, sequence.Length));
+			float interval = moving ? 0.085f : 0.11f;
+			int index = Math.Abs(Mathf.FloorToInt(Time.time / interval) + actorOffset) % sequence.Length;
+			Sprite current = sequence[index];
+			if (current != null) return current;
+		}
+
+		return frames.Fallback
+			?? actor?.asset?._cached_sprite
+			?? actor?.asset?.cached_sprite;
+	}
+
+	/// <summary>
+	/// 供 calculateMainSprite 的专用前缀调用。这里绝不触发贴图读取：十二圣的所有
+	/// Sprite 都已在 ActorAsset 注册阶段缓存完毕，渲染热路径只从小型只读帧表取值。
+	/// </summary>
+	internal static bool TryGetRenderSprite(Actor actor, out Sprite sprite)
+	{
+		sprite = null;
+		if (!TryFindDefinition(actor, out Definition definition)) return false;
+		sprite = GetGreatSageOverrideSprite(definition, actor);
+		return sprite != null;
+	}
+
+	/// <summary>
+	/// WorldBox 的单位渲染还会读取 frame_data 计算锚点与绘制数据。若只返回 override
+	/// Sprite，攻击帧虽已选中，却可能沿用 idle 的 frame_data；这里按天地之魄的做法
+	/// 令其同步到同名帧，找不到时退回容器内第一个有效帧，避免空引用和日志风暴。
+	/// </summary>
+	internal static void SyncRenderFrameData(Actor actor, Sprite sprite)
+	{
+		if (actor == null || sprite == null) return;
+		try
+		{
+			actor.checkAnimationContainer();
+			if (actor.animation_container?.dict_frame_data == null) return;
+			if (!string.IsNullOrWhiteSpace(sprite.name)
+				&& actor.animation_container.dict_frame_data.TryGetValue(sprite.name, out var matchingFrame))
+			{
+				actor.frame_data = matchingFrame;
+				return;
+			}
+			foreach (var frame in actor.animation_container.dict_frame_data.Values)
+			{
+				if (frame == null) continue;
+				actor.frame_data = frame;
+				return;
+			}
+		}
+		catch
+		{
+			// 渲染同步为可选边界；已缓存 Sprite 仍可安全显示，不能把单个单位拖入 Player.log 循环。
+		}
+	}
+
+	private static string GetMainSpritePath(Definition definition)
+	{
+		return SpritePathRoot + definition.ActorAssetId + "/main/";
 	}
 
 	private static string GetSpritePath(Definition definition, string frameName)
@@ -809,20 +1084,6 @@ internal static class XjYaoShuGreatSageSystem
 		}
 	}
 
-	private static HashSet<string> BuildOccupiedFruitSet()
-	{
-		HashSet<string> occupied = new HashSet<string>(StringComparer.Ordinal);
-		IReadOnlyList<XjGuoWeiRegistryEntry> entries = XjGuoWeiRegistry.ReadActiveEntries();
-		for (int i = 0; i < entries.Count; i++)
-		{
-			XjGuoWeiRegistryEntry entry = entries[i];
-			if (!entry.Found || !entry.IsActive || entry.ActorId <= 0L) continue;
-			string normalized = NormalizeFruit(entry.GuoWei);
-			if (normalized.Length > 0) occupied.Add(normalized);
-		}
-		return occupied;
-	}
-
 	private static bool TryManifest(Definition definition, int currentYear, int ordinal, out Actor actor)
 	{
 		actor = null;
@@ -832,13 +1093,20 @@ internal static class XjYaoShuGreatSageSystem
 		Actor spawned = null;
 		try
 		{
-			// 第一次完全交给原生 spawn 建立亚种；之后才传入已存在的共享亚种。
-			// 不可在这里直接 newSpecies：该入口没有原生 spawn 的上下文，在新档会空引用。
-			Subspecies sharedSubspecies = IsUsableGreatSageSubspecies(_sharedGreatSageSubspecies)
-				? _sharedGreatSageSubspecies
+			// 第一次由原生 spawn 为该 ActorAsset 建立亚种；之后只复用“同一 ActorAsset”
+			// 已绑定的亚种。不能跨十二圣共享 Subspecies 对象。
+			Subspecies slotSubspecies = TryGetBoundGreatSageSubspecies(definition, out Subspecies boundSubspecies)
+				? boundSubspecies
 				: null;
-			spawned = world.units.spawnNewUnit(definition.ActorAssetId, tile, false, false, 0f, sharedSubspecies, false, true);
+			spawned = world.units.spawnNewUnit(definition.ActorAssetId, tile, false, false, 0f, slotSubspecies, false, true);
 			if (spawned?.data == null) return false;
+			// 先闭合 WorldBox 自身的 tile/野生容器关系，再写玄鉴身份。绝不能让一只
+			// kingdom 为 null 的半成 Actor 进入 BatchActors；那会在原生 AI 更新中逐帧 NRE。
+			if (!EnsureGreatSageNativeState(spawned, tile))
+			{
+				XjDengMingShiSpawnSafety.TryRemoveInvalidActor(spawned);
+				return false;
+			}
 			spawned.data.age_overgrowth = 18;
 			XjActorStateWriteGateway.SetDisplayName(spawned, definition.DisplayName, customName: true);
 			EnsureGreatSageIdentity(spawned, definition, currentYear);
@@ -857,39 +1125,137 @@ internal static class XjYaoShuGreatSageSystem
 		}
 	}
 
-	private static void EnsureSharedGreatSageSubspecies(Actor actor)
+	/// <summary>
+	/// 对齐龙属的原生创建闭环。大圣没有文明归属，也不进城市；但原版 ActorManager
+	/// 无条件读取 actor.kingdom.wild，故必须保留 dragons 野生容器这一底层引用。
+	/// </summary>
+	private static bool EnsureGreatSageNativeState(Actor actor, WorldTile requestedTile)
 	{
-		if (actor?.data == null || !IsUsableGreatSageSubspecies(actor.subspecies)) return;
+		if (actor?.data == null || requestedTile?.chunk == null) return false;
+		try
+		{
+			WorldTile currentTile = actor.current_tile;
+			if (currentTile?.chunk == null)
+			{
+				actor.spawnOn(requestedTile);
+				currentTile = actor.current_tile;
+			}
+			if (currentTile?.chunk == null) return false;
+
+			if (actor.kingdom == null)
+			{
+				actor.setDefaultKingdom();
+			}
+			if (actor.kingdom == null || !actor.kingdom.wild) return false;
+
+			// 大圣不进城市；只保留野生容器，宗门归属另由玄鉴宗门逻辑维护。
+			actor.setCity(null);
+			return true;
+		}
+		catch
+		{
+			return false;
+		}
+	}
+
+	private static void EnsureGreatSageSubspecies(Actor actor, Definition definition)
+	{
+		if (actor?.data == null || definition == null) return;
 		try
 		{
 			Subspecies current = actor.subspecies;
-			NormalizeGreatSageSubspecies(current);
-			if (!IsUsableGreatSageSubspecies(_sharedGreatSageSubspecies))
+			if (!IsUsableGreatSageSubspeciesForDefinition(current, definition))
 			{
-				BindSharedGreatSageSubspecies(current);
+				// 0.9.11早期实现曾把十二种 ActorAsset 强行共用第一只大圣的 Subspecies。
+				// 对已经写进存档的错配亚种做一次就地迁移，避免人物面板/预渲染继续读取
+				// actor.asset 与 subspecies.species_id 不一致的原生元数据。
+				current = TryRepairLegacyCrossAssetSubspecies(actor, definition, current);
+				if (!IsUsableGreatSageSubspeciesForDefinition(current, definition)) return;
 			}
-			else if (current.id != _sharedGreatSageSubspeciesId)
+			NormalizeGreatSageSubspecies(current);
+
+			if (!TryGetBoundGreatSageSubspecies(definition, out Subspecies bound))
 			{
-				// 与龙属相同，只写 Actor 的亚种引用，避免 setSubspecies 触发运行中集合重入。
-				XjNativeReflectionInterop.TryWriteMemberValue(actor, "subspecies", _sharedGreatSageSubspecies);
+				RuntimeSubspeciesByAssetId[definition.ActorAssetId] = current;
+				bound = current;
+			}
+			else if (bound.id != current.id)
+			{
+				// 同一 ActorAsset 的后续化生统一回自己的亚种；仅写 Actor 引用，
+				// 避免 setSubspecies 在运行中触发集合重入。
+				XjNativeReflectionInterop.TryWriteMemberValue(actor, "subspecies", bound);
 			}
 
-			SetGreatSageSubspeciesId(actor, _sharedGreatSageSubspeciesId);
-			NormalizeGreatSageSubspecies(_sharedGreatSageSubspecies);
+			SetGreatSageSubspeciesId(actor, bound.id);
+			NormalizeGreatSageSubspecies(bound);
 		}
 		catch (Exception ex)
 		{
-			XjExceptionDiagnostics.Report("YaoShuGreatSage.SharedSubspecies.Assign", ex);
+			XjExceptionDiagnostics.Report("YaoShuGreatSage.Subspecies.Assign." + definition.SlotId, ex);
 		}
 	}
 
-	private static void BindSharedGreatSageSubspecies(Subspecies subspecies)
+	private static bool TryGetBoundGreatSageSubspecies(Definition definition, out Subspecies subspecies)
 	{
-		if (!IsUsableGreatSageSubspecies(subspecies)) return;
-		_sharedGreatSageSubspecies = subspecies;
-		_sharedGreatSageSubspeciesId = subspecies.id;
-		NormalizeGreatSageSubspecies(subspecies);
+		subspecies = null;
+		if (definition == null
+			|| !RuntimeSubspeciesByAssetId.TryGetValue(definition.ActorAssetId, out Subspecies candidate)
+			|| !IsUsableGreatSageSubspeciesForDefinition(candidate, definition))
+		{
+			if (definition != null) RuntimeSubspeciesByAssetId.Remove(definition.ActorAssetId);
+			return false;
+		}
+		subspecies = candidate;
+		return true;
 	}
+
+	private static bool IsUsableGreatSageSubspeciesForDefinition(Subspecies subspecies, Definition definition)
+	{
+		if (subspecies == null || definition == null || subspecies.isRekt()) return false;
+		try
+		{
+			return string.Equals(subspecies.getActorAsset()?.id, definition.ActorAssetId, StringComparison.Ordinal);
+		}
+		catch
+		{
+			return false;
+		}
+	}
+
+	private static Subspecies TryRepairLegacyCrossAssetSubspecies(Actor actor, Definition definition, Subspecies source)
+	{
+		if (actor?.data == null || definition == null || source?.data == null
+			|| World.world?.subspecies == null || World.world?.map_stats == null) return null;
+		try
+		{
+			SubspeciesData copy = JsonConvert.DeserializeObject<SubspeciesData>(
+				JsonConvert.SerializeObject(source.data, Formatting.None));
+			if (copy == null) return null;
+			copy.id = World.world.map_stats.getNextId("subspecies");
+			copy.name = GreatSageSubspeciesName;
+			copy.custom_name = true;
+			copy.species_id = definition.ActorAssetId;
+			// 原 parent_subspecies 属于另一 ActorAsset，不可继续保留跨种父链。
+			copy.parent_subspecies = 0L;
+			copy.created_time = World.world.map_stats.world_time;
+			copy.total_deaths = 0L;
+			copy.total_births = 0L;
+			copy.total_kills = 0L;
+			World.world.subspecies.loadObject(copy);
+			Subspecies repaired = World.world.subspecies.get(copy.id);
+			if (!IsUsableGreatSageSubspeciesForDefinition(repaired, definition)) return null;
+			actor.setSubspecies(repaired);
+			actor.data.subspecies = repaired.id;
+			RuntimeSubspeciesByAssetId[definition.ActorAssetId] = repaired;
+			return repaired;
+		}
+		catch (Exception ex)
+		{
+			XjExceptionDiagnostics.Report("YaoShuGreatSage.Subspecies.Migrate." + definition.SlotId, ex);
+			return null;
+		}
+	}
+
 
 	private static bool IsUsableGreatSageSubspecies(Subspecies subspecies)
 	{
@@ -1002,7 +1368,10 @@ internal static class XjYaoShuGreatSageSystem
 	private static void ApplyStrategicPulse(Actor actor, Definition definition)
 	{
 		if (!XjSafeCore.IsAliveActor(actor)) return;
-		EnsureGreatSageIdentity(actor, definition, Math.Max(0, World.world?.map_stats?.year ?? 0));
+		int currentYear = Math.Max(0, World.world?.map_stats?.year ?? 0);
+		EnsureGreatSageIdentity(actor, definition, currentYear);
+		// 妖民正常人口由原生 BabyMaker 维持；十年脉冲只在该族已真正灭绝时低频再点化。
+		XjYaoShuSapientSpecies.TryMaintainForGreatSage(definition.SlotId, actor.current_tile, currentYear);
 		try
 		{
 			float maxHealth = XjSafeCore.GetMaxHealthSafe(actor, Math.Max(1f, definition.Health));
@@ -1121,7 +1490,7 @@ internal static class XjYaoShuGreatSageSystem
 	private static bool TryFindDefinition(Actor actor, out Definition definition)
 	{
 		definition = null;
-		string assetId = actor?.data?.asset_id;
+		string assetId = actor?.asset?.id ?? actor?.data?.asset_id;
 		if (string.IsNullOrWhiteSpace(assetId)) return false;
 		for (int i = 0; i < Definitions.Length; i++)
 		{
@@ -1279,6 +1648,9 @@ internal static class XjYaoShuGreatSageSystem
 
 	internal static IReadOnlyList<CodexItem> BuildCodexItems()
 	{
+		// 仙鉴与排行榜共用同一十二席恢复入口，避免旧0.9.11存档里 Actor 仍存活、
+		// 但历史槽位曾被误清后出现“仙鉴0/12、世界里却看得到大圣”的分裂状态。
+		EnsureRankMembership();
 		List<CodexItem> items = new List<CodexItem>(Definitions.Length);
 		for (int i = 0; i < Definitions.Length; i++)
 		{
@@ -1291,6 +1663,7 @@ internal static class XjYaoShuGreatSageSystem
 				Skill = definition.SkillName,
 				YaoMin = definition.YaoMinName,
 				Fruit = definition.FruitId,
+				YaoMinPopulation = XjYaoShuSapientSpecies.GetPopulationCountForSlot(definition.SlotId),
 				Alive = TryResolveLivingSage(definition, state.ActorId, out _),
 				ManifestationCount = state.ManifestationCount,
 				LastManifestationYear = state.LastManifestationYear,
@@ -1307,7 +1680,9 @@ internal static class XjYaoShuGreatSageSystem
 		currentYear = Math.Max(0, currentYear);
 		try
 		{
-			EnsureSharedGreatSageSubspecies(actor);
+			// 载入旧存档时也按龙属规则修复遗留的空 kingdom，不创建文明、不强加势力。
+			if (!EnsureGreatSageNativeState(actor, actor.current_tile)) return;
+			EnsureGreatSageSubspecies(actor, definition);
 			XjActorAccessor.SetInt(actor, XjActorDataKeys.XjZz, 6);
 			XjActorAccessor.SetInt(actor, XjActorDataKeys.XjZzCheckedAge5, 1);
 			XjActorAccessor.SetInt(actor, XjActorDataKeys.ManualXjZz6Grant, 0);
@@ -1342,6 +1717,7 @@ internal static class XjYaoShuGreatSageSystem
 			EnsureGreatSageAuthority(actor, definition, currentYear);
 			XjActorRegistry.Register(actor, out _);
 			XjCultivatorCache.CheckAndUpdate(actor);
+			TrackRankActor(GetActorId(actor));
 			actor.setStatsDirty();
 		}
 		catch (Exception ex)
@@ -1361,8 +1737,8 @@ internal static class XjYaoShuGreatSageSystem
 		for (int i = 0; i < count; i++) authorities[i] = catalog[i];
 		XjGuoWeiQuanBingRegistry.Record(new XjGuoWeiQuanBingState(
 			true, actorId, actor.getName(), definition.DaoTu, definition.FruitId, string.Join(",", authorities),
-			string.Empty, string.Empty, string.Empty, "妖属正位", string.Empty, 0, false, 0,
-			"妖属大圣应正位而化，所执本柄随果位同显", "Active", Math.Max(1, currentYear)));
+			string.Empty, string.Empty, string.Empty, "妖属映照", string.Empty, 0, false, 0,
+			"妖属大圣应果位而化，只作映照，不占修士正位；所执本柄随果位同显", "Active", Math.Max(1, currentYear)));
 	}
 
 	private static void EnsureNativeTraits(Actor actor, Definition definition)
@@ -1391,9 +1767,17 @@ internal static class XjYaoShuGreatSageSystem
 	private static bool TryResolveLivingSage(Definition definition, long actorId, out Actor actor)
 	{
 		actor = null;
-		if (actorId <= 0L || definition == null || World.world?.units == null) return false;
-		actor = World.world.units.get(actorId);
-		if (!XjSafeCore.IsAliveActor(actor) || actor.data == null || !string.Equals(actor.data.asset_id, definition.ActorAssetId, StringComparison.Ordinal))
+		if (actorId <= 0L || definition == null) return false;
+		// 刚 spawn/刚载档的自定义单位可能已经存在于玄鉴 ActorRegistry，但尚未稳定进入
+		// World.world.units.get(id) 的原生索引。旧实现只查后者，会把仍活着的大圣误判为
+		// “身殒”，清空槽位，正是仙鉴显示0/12且世界里Actor仍存在的根因。
+		if (!XjActorRegistry.ResolveKnownOrWorld(actorId, out actor) || !XjSafeCore.IsAliveActor(actor))
+		{
+			actor = null;
+			return false;
+		}
+		string assetId = (actor.asset?.id ?? actor.data?.asset_id ?? string.Empty).Trim();
+		if (!string.Equals(assetId, definition.ActorAssetId, StringComparison.Ordinal))
 		{
 			actor = null;
 			return false;
@@ -1432,9 +1816,10 @@ internal static class XjYaoShuGreatSageSystem
 	private static void RecordDeparture(Definition definition, long actorId, int currentYear)
 	{
 		if (definition == null || actorId <= 0L) return;
+		RemoveRankActor(actorId);
 		XjGuoWeiQuanBingRegistry.RemoveActor(actorId);
 		string body = definition.DisplayName + "身殒，" + definition.FruitId
-			+ "失主。天数沉寂百五十年，方许后继再问此位。";
+			+ "映照沉寂。天数沉寂百五十年，方许后继再度化生。";
 		XjWorldHistoryStore.RecordDomainEvent(
 			XjWorldHistoryCategory.HighRealm,
 			definition.DisplayName + "身灭",
@@ -1447,7 +1832,7 @@ internal static class XjYaoShuGreatSageSystem
 			eventType: "YaoShuGreatSageDeparture",
 			mirrorToWorldLog: true);
 		XjBroadcastSystem.ShowRecordedCategorizedWorldTipCritical(
-			"【大圣身殒】" + definition.DisplayName + "归寂，" + definition.DaoTu + "正位暂空。",
+			"【大圣身殒】" + definition.DisplayName + "归寂，" + definition.DaoTu + "映照暂寂。",
 			XjAnnouncementCategory.HighRealm,
 			duration: 8f,
 			color: "#8DA2B8");
@@ -1457,7 +1842,7 @@ internal static class XjYaoShuGreatSageSystem
 	{
 		long actorId = GetActorId(actor);
 		string body = definition.DisplayName + "应" + definition.FruitId + "而现，"
-			+ "神通【" + definition.SkillName + "】初鸣；此位由其镇守。";
+			+ "神通【" + definition.SkillName + "】初鸣；只映其位，不夺修士正席。";
 		XjWorldHistoryStore.RecordDomainEvent(
 			XjWorldHistoryCategory.HighRealm,
 			definition.DisplayName + "化生",

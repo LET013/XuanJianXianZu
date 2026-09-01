@@ -1,9 +1,10 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using XuanJianVNext.Architecture.Presentation;
 using XuanJianVNext.Systems.Cultivation;
 using XuanJianVNext.Systems.Combat;
 using XuanJianVNext.Systems.HighRealm;
+using XuanJianVNext.Systems.YaoShu;
 
 namespace XuanJianVNext.Core;
 
@@ -52,6 +53,9 @@ internal static class XjActorRegistry
 		{
 			CleanupQueue.Enqueue(actorId);
 		}
+		// 妖民人口索引只读稳定 ActorId。载档/本地 Actor 回调经过 Registry 时增量重建，
+		// 不需要任何 World.units 年度扫描。
+		XjYaoShuSapientSpecies.ObserveKnownActor(actor);
 		return true;
 	}
 
@@ -138,6 +142,7 @@ internal static class XjActorRegistry
 		XjDomainSkillRuntime.RemoveActor(actorId);
 		XjHuoDeFireBirdSummonSystem.RemoveActor(actorId);
 		XjSanYinBaoYiXuanLunSystem.RemoveActor(actorId);
+		XjYaoShuSapientSpecies.OnActorUnavailable(actorId);
 		InvalidateActorProjection(actorId);
 		if (!XuanJianVNext.Systems.Runtime.XjWorldBootstrapLane.HasPending)
 		{
@@ -200,6 +205,7 @@ internal static class XjActorRegistry
 				XjDomainSkillRuntime.RemoveActor(actorId);
 				XjHuoDeFireBirdSummonSystem.RemoveActor(actorId);
 				XjSanYinBaoYiXuanLunSystem.RemoveActor(actorId);
+				XjYaoShuSapientSpecies.OnActorUnavailable(actorId);
 				InvalidateActorProjection(actorId);
 				if (!XuanJianVNext.Systems.Runtime.XjWorldBootstrapLane.HasPending)
 				{
@@ -224,6 +230,7 @@ internal static class XjActorRegistry
 		RegistryRevision = 0L;
 		SnapshotRevision = -1L;
 		XjStaleActorIdEviction.Clear();
+		XjYaoShuPopulationIndex.ResetForNewWorld();
 	}
 
 

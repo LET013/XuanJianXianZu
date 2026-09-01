@@ -78,7 +78,26 @@ internal static class XjZhangYanEasterEggSystem
 	{
 		if (!IsZhangYan(actor)) return title ?? string.Empty;
 		string value = (title ?? string.Empty).Trim();
+		if (TryRebuildJunTitle(value, DaoHao, out string rebuilt)) return rebuilt;
 		return value.Contains(DaoHao, StringComparison.Ordinal) ? value : DaoHao + value;
+	}
+
+	private static bool TryRebuildJunTitle(string value, string prefix, out string rebuilt)
+	{
+		rebuilt = string.Empty;
+		if (string.IsNullOrWhiteSpace(value) || value.Length < 4) return false;
+		string[] suffixes = { "玄君", "神君", "真君", "元君", "帝君", "飞君" };
+		for (int i = 0; i < suffixes.Length; i++)
+		{
+			string suffix = suffixes[i];
+			if (!value.EndsWith(suffix, StringComparison.Ordinal)) continue;
+			string stem = value.Substring(0, value.Length - suffix.Length);
+			if (stem.StartsWith(prefix, StringComparison.Ordinal)) stem = stem.Substring(prefix.Length);
+			if (stem.Length < 4) return false;
+			rebuilt = prefix + stem.Substring(0, 4) + suffix;
+			return true;
+		}
+		return false;
 	}
 
 	internal static string ExportPayload() => (_attempted ? "1" : "0") + "|" + (_born ? "1" : "0") + "|" + _actorId.ToString(CultureInfo.InvariantCulture);

@@ -24,11 +24,36 @@ using XuanJianVNext.Systems.WeaponArt;
 using XuanJianVNext.Systems.Events;
 using XuanJianVNext.Systems.Shi;
 using XuanJianVNext.Systems.XianGuo;
+using XuanJianVNext.Systems.YaoShu;
 
 namespace XuanJianVNext.Patches;
 
 internal partial class XjVNextPatches
 {
+	// 不能把大圣的 attack/breathing 帧交给 ActorAsset 的普通 idle/walk 名称猜测。
+	// 直接截获 calculateMainSprite，只服务十二个专用 ActorAsset；帧已在注册阶段预加载，
+	// 此处不读取 Resources、不扫描单位，也不影响任何原生单位。
+	[HarmonyPrefix]
+	[HarmonyPriority(Priority.First)]
+	[HarmonyPatch(typeof(Actor), "calculateMainSprite")]
+	public static bool XuanJianVNext_Actor_CalculateMainSprite_GreatSageAnimation_Prefix(
+		Actor __instance,
+		ref Sprite __result)
+	{
+		try
+		{
+			if (!XjYaoShuGreatSageSystem.TryGetRenderSprite(__instance, out Sprite sprite)) return true;
+			__result = sprite;
+			XjYaoShuGreatSageSystem.SyncRenderFrameData(__instance, sprite);
+			return false;
+		}
+		catch
+		{
+			// 大圣渲染故障只允许退回原生 calculateMainSprite，绝不向每帧日志重复抛错。
+			return true;
+		}
+	}
+
 	[HarmonyPrefix]
 	[HarmonyPriority(Priority.First)]
 	[HarmonyPatch(typeof(Actor), "updateAge")]

@@ -60,7 +60,8 @@ internal static class XjRankReadModel
 {
 	private const double CacheLifetimeMilliseconds = 15000d;
 	private static IReadOnlyList<XjRankItem> _cachedAll = Array.Empty<XjRankItem>();
-	private static int _cachedCultivatorCount = -1;
+	private static int _cachedCultivatorRevision = -1;
+	private static int _cachedGreatSageRevision = -1;
 	private static long _cachedTimestamp;
 	private static int _cachedObservedYear = -1;
 
@@ -68,7 +69,8 @@ internal static class XjRankReadModel
 	internal static void InvalidateCache()
 	{
 		_cachedAll = Array.Empty<XjRankItem>();
-		_cachedCultivatorCount = -1;
+		_cachedCultivatorRevision = -1;
+		_cachedGreatSageRevision = -1;
 		_cachedTimestamp = 0L;
 		_cachedObservedYear = -1;
 	}
@@ -78,11 +80,10 @@ internal static class XjRankReadModel
 		// 大圣只维护固定十二个槽位。榜单打开时做一次定额回填，避免刚化生或刚载档时
 		// 因年度调度尚未走到而暂时漏出修士候选集；不扫描世界 Actor。
 		XjYaoShuGreatSageSystem.EnsureRankMembership();
-		if (realmFilter == 5)
-		{
-			return BuildJinDanOnly();
-		}
-		int count = XjCultivatorCache.Count;
+		// realmFilter 由排行榜 UI 在统一 ReadModel 上做等阶筛选。旧实现把 order=5
+		// 特判成“只读金丹不朽注册表”，会把同为五阶的真君羽士/妖属大圣全部排除。
+		int cultivatorRevision = XjCultivatorCache.MembershipRevision;
+		int greatSageRevision = XjYaoShuGreatSageSystem.RankMembershipRevision;
 		int observedYear = Math.Max(0, XjYearTracker.CurrentYear);
 		if (_cachedObservedYear >= 0 && observedYear < _cachedObservedYear)
 		{
@@ -90,15 +91,17 @@ internal static class XjRankReadModel
 		}
 		// 高倍速下世界年会数秒内跳过多次。排行榜只读快照若把“年份变化”
 		// 作为硬失效条件，会周期性遍历全部修士并制造肉眼可见的卡顿。
-		// 年龄与排序允许最多15秒显示延迟；人数变化仍会立即重建。
-		if (_cachedCultivatorCount == count
+		// 年龄与排序允许最多15秒显示延迟；成员身份变化（包括人数不变的替换）立即重建。
+		if (_cachedCultivatorRevision == cultivatorRevision
+			&& _cachedGreatSageRevision == greatSageRevision
 			&& _cachedTimestamp > 0L
 			&& ElapsedMilliseconds(_cachedTimestamp) <= CacheLifetimeMilliseconds)
 		{
 			return _cachedAll;
 		}
 		_cachedAll = BuildFromKnownActors();
-		_cachedCultivatorCount = count;
+		_cachedCultivatorRevision = cultivatorRevision;
+		_cachedGreatSageRevision = greatSageRevision;
 		_cachedObservedYear = observedYear;
 		_cachedTimestamp = Stopwatch.GetTimestamp();
 		return _cachedAll;
@@ -106,11 +109,21 @@ internal static class XjRankReadModel
 
 	private static IReadOnlyList<XjRankItem> BuildFromKnownActors()
 	{
-		IReadOnlyList<long> actorIds = XjCultivatorCache.GetAllIds();
-		List<XjRankItem> items = new List<XjRankItem>(actorIds.Count);
-		for (int i = 0; i < actorIds.Count; i++)
+		IReadOnlyList<long> cultivatorIds = XjCultivatorCache.GetAllIds();
+		IReadOnlyList<long> greatSageIds = XjYaoShuGreatSageSystem.GetRankActorIds();
+		HashSet<long> actorIds = new HashSet<long>();
+		for (int i = 0; i < cultivatorIds.Count; i++)
 		{
-			long actorId = actorIds[i];
+			if (cultivatorIds[i] > 0L) actorIds.Add(cultivatorIds[i]);
+		}
+		for (int i = 0; i < greatSageIds.Count; i++)
+		{
+			if (greatSageIds[i] > 0L) actorIds.Add(greatSageIds[i]);
+		}
+
+		List<XjRankItem> items = new List<XjRankItem>(actorIds.Count);
+		foreach (long actorId in actorIds)
+		{
 			if (!XjActorRegistry.ResolveKnownOrWorld(actorId, out Actor actor))
 			{
 				continue;
