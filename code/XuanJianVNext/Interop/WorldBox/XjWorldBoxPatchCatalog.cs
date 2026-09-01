@@ -24,6 +24,9 @@ internal static class XjWorldBoxPatchCatalog
         typeof(XjHighRealmBirthPatches),
         typeof(XjNativeAiPerformancePatches),
         typeof(XjNativeTargetSafetyPatches),
+        // 仅拦截 xj_yaoshu_dasheng_* 的低频原生生成事务。若 spawnNewUnit 在返回
+        // Actor 前内部抛错，按事务前后 ID 差集回滚本次半成单位，不影响普通 Actor。
+        typeof(XjGreatSageSpawnSafetyPatches),
         typeof(XjStunGuard),
         typeof(XjKnockbackGuard)
     };
