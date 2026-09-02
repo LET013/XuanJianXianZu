@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using XuanJianVNext.Core;
 using XuanJianVNext.Systems.ActorSystem;
 using XuanJianVNext.Data.Rules;
+using XuanJianVNext.Data.Cultivation;
 using XuanJianVNext.Systems.Combat;
 using XuanJianVNext.Systems.LongShu;
 using XuanJianVNext.Systems.Shi;
@@ -10,6 +11,7 @@ using XuanJianVNext.Systems.WeaponArt;
 using XuanJianVNext.Systems.Cultivation;
 using XuanJianVNext.Systems.Family;
 using XuanJianVNext.Systems.XianGuo;
+using XuanJianVNext.Systems.YaoShu;
 
 namespace XuanJianVNext.Systems.HighRealm;
 
@@ -726,7 +728,7 @@ internal static class XjRealmTitleNameLibrary
 
 	private static string NormalizeDaoTu(string daoTu)
 	{
-		string text = (daoTu ?? string.Empty).Trim();
+		string text = XjDaoTuIntentIdentity.ResolveCore(daoTu);
 		return !string.IsNullOrWhiteSpace(text)
 			&& XuanJianVNext.Systems.Cultivation.XjDaoTuVisibleTraitCatalog.TryResolveTraitId(text, out _)
 				? text
@@ -1521,6 +1523,18 @@ internal static class XjRealmTitleApplyService
 	private static string GenerateActorAwareTitle(Actor actor, string realmId, string daoTu)
 	{
 		string title = XjRealmTitleNameLibrary.GenerateTitle(realmId, daoTu, GetActorId(actor));
+		if (XjXianGuoSystem.IsImperialIntent(actor)
+			&& (string.Equals(XjRealmHelper.NormalizeId(realmId), XjRealmIds.JinDan, StringComparison.Ordinal)
+				|| string.Equals(XjRealmHelper.NormalizeId(realmId), XjRealmIds.ZhenJunYuShi, StringComparison.Ordinal)))
+		{
+			title = ReplaceHighRealmTitleSuffix(title, "帝君");
+		}
+		else if (XjYaoShuHalfBloodlineSystem.IsYaoIntent(actor)
+			&& (string.Equals(XjRealmHelper.NormalizeId(realmId), XjRealmIds.JinDan, StringComparison.Ordinal)
+				|| string.Equals(XjRealmHelper.NormalizeId(realmId), XjRealmIds.ZhenJunYuShi, StringComparison.Ordinal)))
+		{
+			title = ReplaceHighRealmTitleSuffix(title, "妖君");
+		}
 		if (ShouldUseFemaleYuanJun(actor, realmId, daoTu))
 		{
 			title = ReplaceHighRealmTitleSuffix(title, "元君");

@@ -80,6 +80,7 @@ internal static class XjWorldBoxPatchCatalog
         ApplyOptionalInitializer("native-magic-ritual", () => XjNativeMagicRitualGuard.Init(harmony));
         ApplyOptionalInitializer("zhantanlin-native-settlement", () => XjZhantanlinNativeSettlementGuard.Init(harmony));
         ApplyOptionalInitializer("avbs-trait-pack", () => XjAvbsTraitPackInterop.Init(harmony));
+		ApplyOptionalInitializer("zack-observer-erasure", () => XjZackObserverErasureInterop.Init(harmony));
 
         for (int i = 0; i < PatchTypes.Length; i++)
         {

@@ -13,6 +13,7 @@ internal static class XjThreeBookEventTypes
 {
 	internal const string PersonalBirth = "PersonalBirth";
 	internal const string PersonalAptitude = "PersonalAptitude";
+	internal const string PersonalHalfYaoBloodline = "PersonalHalfYaoBloodline";
 	internal const string PersonalCultivationQualified = "PersonalCultivationQualified";
 	internal const string PersonalRealmBreakthrough = "PersonalRealmBreakthrough";
 	internal const string PersonalDongTianJourney = "PersonalDongTianJourney";

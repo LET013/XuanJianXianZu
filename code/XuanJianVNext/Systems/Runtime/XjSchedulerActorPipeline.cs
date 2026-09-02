@@ -1319,6 +1319,13 @@ internal static class XjSchedulerActorPipeline
 		{
 			return;
 		}
+		// 仅针对已进入年度功法处理的筑基修士补旧档缺失的首门仙基；没有额外
+		// 世界扫描，也不进入紫府以后的五神通判定。手动授境前版本留下的空状态
+		// 会在下一次正常筑基年度处理时自愈。
+		if (snapshot.XianJiCount <= 0)
+		{
+			XjZiFuProgression.EnsureZhuJiFoundationXianJi(actor, snapshot.DaoTu, currentYear);
+		}
 
 		if (XjDaoXingStageRules.IsZhuJiLateOrHigher(
 			snapshot.RealmId,

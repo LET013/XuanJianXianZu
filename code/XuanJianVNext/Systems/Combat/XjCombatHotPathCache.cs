@@ -147,6 +147,7 @@ internal static class XjCombatHotPathCache
 			actor,
 			XuanJianVNext.Data.Rules.XjActorDataKeys.DaoTu,
 			out string daoTu);
+		daoTu = XuanJianVNext.Data.Cultivation.XjDaoTuIntentIdentity.ResolveCore(daoTu);
 		XuanJianVNext.Systems.ActorSystem.XjActorAccessor.TryGetInt(
 			actor,
 			XuanJianVNext.Data.Rules.XjActorDataKeys.XjFamilyFormationGuardGrade,

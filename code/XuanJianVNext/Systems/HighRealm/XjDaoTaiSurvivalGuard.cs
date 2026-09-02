@@ -16,14 +16,12 @@ internal static class XjDaoTaiSurvivalGuard
 	private const int MinimumProtectedHealth = 1;
 
 	/// <summary>
-	/// 道胎/世尊真正的第一层保护：普通游戏运行中的任何死亡都不应成立。
+	/// 道胎/世尊真正的第一层保护：尘世运行中的任何死亡都不应成立。
 	/// TechnicalRemoval 仅用于清档/换世界/明确销毁对象，必须放行。
 	/// </summary>
 	internal static bool ShouldBlockDirectDeath(Actor actor, XjDeathCause cause)
 	{
-		bool irreversibleYaoXieYinSi = cause == XjDeathCause.YinSi
-			&& XjTrueDamageSystem.HasIrreversibleYinSiClaimFast(actor);
-		if (actor?.data == null || cause == XjDeathCause.TechnicalRemoval || irreversibleYaoXieYinSi
+		if (actor?.data == null || cause == XjDeathCause.TechnicalRemoval
 			|| !XjDaoTaiEquivalentExistenceRules.IsProtectedExistence(actor))
 		{
 			return false;
@@ -40,9 +38,7 @@ internal static class XjDaoTaiSurvivalGuard
 	internal static void ClampIncomingDamage(Actor actor, ref float damage)
 	{
 		if (damage <= 0f || actor?.data == null || !XjDaoTaiEquivalentExistenceRules.IsProtectedExistence(actor)
-			|| XjDeathArbitrationPipeline.IsForcedCause(actor, XjDeathCause.TechnicalRemoval)
-			|| (XjDeathArbitrationPipeline.IsForcedCause(actor, XjDeathCause.YinSi)
-				&& XjTrueDamageSystem.HasIrreversibleYinSiClaimFast(actor))) return;
+			|| XjDeathArbitrationPipeline.IsForcedCause(actor, XjDeathCause.TechnicalRemoval)) return;
 		float health = Math.Max(0f, XjSafeCore.GetHealthSafe(actor, actor.data.health));
 		float maximumDamage = Math.Max(0f, health - MinimumProtectedHealth);
 		if (damage > maximumDamage) damage = maximumDamage;
@@ -51,9 +47,7 @@ internal static class XjDaoTaiSurvivalGuard
 	internal static int ResolveProtectedHealthDelta(Actor actor, int delta)
 	{
 		if (delta >= 0 || actor?.data == null || !XjDaoTaiEquivalentExistenceRules.IsProtectedExistence(actor)
-			|| XjDeathArbitrationPipeline.IsForcedCause(actor, XjDeathCause.TechnicalRemoval)
-			|| (XjDeathArbitrationPipeline.IsForcedCause(actor, XjDeathCause.YinSi)
-				&& XjTrueDamageSystem.HasIrreversibleYinSiClaimFast(actor))) return delta;
+			|| XjDeathArbitrationPipeline.IsForcedCause(actor, XjDeathCause.TechnicalRemoval)) return delta;
 		int health = Math.Max(0, actor.data.health);
 		int minimumDelta = MinimumProtectedHealth - health;
 		return Math.Max(delta, minimumDelta);
@@ -62,9 +56,7 @@ internal static class XjDaoTaiSurvivalGuard
 	internal static int ResolveProtectedSetHealth(Actor actor, int requestedHealth)
 	{
 		if (actor?.data == null || !XjDaoTaiEquivalentExistenceRules.IsProtectedExistence(actor)
-			|| XjDeathArbitrationPipeline.IsForcedCause(actor, XjDeathCause.TechnicalRemoval)
-			|| (XjDeathArbitrationPipeline.IsForcedCause(actor, XjDeathCause.YinSi)
-				&& XjTrueDamageSystem.HasIrreversibleYinSiClaimFast(actor))) return requestedHealth;
+			|| XjDeathArbitrationPipeline.IsForcedCause(actor, XjDeathCause.TechnicalRemoval)) return requestedHealth;
 		return Math.Max(MinimumProtectedHealth, requestedHealth);
 	}
 
@@ -72,9 +64,7 @@ internal static class XjDaoTaiSurvivalGuard
 	{
 		return actor?.data != null
 			&& XjDaoTaiEquivalentExistenceRules.IsProtectedExistence(actor)
-			&& !XjDeathArbitrationPipeline.IsForcedCause(actor, XjDeathCause.TechnicalRemoval)
-			&& !(XjDeathArbitrationPipeline.IsForcedCause(actor, XjDeathCause.YinSi)
-				&& XjTrueDamageSystem.HasIrreversibleYinSiClaimFast(actor));
+			&& !XjDeathArbitrationPipeline.IsForcedCause(actor, XjDeathCause.TechnicalRemoval);
 	}
 
 	internal static void RecoverFromBlockedDeath(Actor actor)

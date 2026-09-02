@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using XuanJianVNext.Core;
+using XuanJianVNext.Data.Cultivation;
 using XuanJianVNext.Systems.ActorSystem;
 using XuanJianVNext.Systems.Broadcast;
 using XuanJianVNext.Systems.Alchemy;
@@ -30,6 +31,9 @@ internal static class XjZiFuProgression
 
 	internal static bool EnsureZhuJiFoundationXianJi(Actor actor, string daoTu, int currentYear)
 	{
+		// 妖、帝意向只是同一条道途的身份覆名。仙基目录仍按本道索引，不能把
+		// “帝·并火”当作一条不存在的新道途；这也让手动补境与自然突破共用同一映射。
+		daoTu = XjDaoTuIntentIdentity.ResolveCore(daoTu);
 		if (actor?.data == null
 			|| string.IsNullOrWhiteSpace(daoTu)
 			|| XjXianJiAccessor.BuildState(actor).Count > 0)

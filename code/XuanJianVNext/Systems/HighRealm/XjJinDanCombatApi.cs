@@ -263,7 +263,45 @@ internal static class XjJinDanCombatApi
 		string spellId,
 		out string reason)
 	{
+		if (caster?.data != null
+			&& XjJinDanDaoSpellRuntime.IsJinDanActor(caster)
+			&& IsNativeDestructionTerrainEffect(effectType))
+		{
+			return TryApplyNativeTerrainDestruction(caster, centerTile, radius, out reason);
+		}
+
 		return TryEnqueueTerrainEffect(caster, centerTile, effectType, radius, durationSeconds, null, out reason);
+	}
+
+	private static bool IsNativeDestructionTerrainEffect(string effectType)
+	{
+		return string.Equals(effectType, "CommonLeiFaTerrain", StringComparison.Ordinal)
+			|| string.Equals(effectType, "DaRiTerrain", StringComparison.Ordinal)
+			|| string.Equals(effectType, "SmashTerrain", StringComparison.Ordinal);
+	}
+
+	private static bool TryApplyNativeTerrainDestruction(Actor caster, WorldTile centerTile, int radius, out string reason)
+	{
+		reason = string.Empty;
+		if (centerTile == null || radius <= 0)
+		{
+			reason = "invalid_native_destruction_args";
+			return false;
+		}
+
+		try
+		{
+			// 地形摧毁完全交由 WorldBox 原生圆形 damageWorld 处理；不再通过
+			// 512 格采样队列逐格 decreaseTile，因此不会留下隔格破坏的棋盘纹。
+			MapAction.damageWorld(centerTile, radius, TerraformLibrary.bomb, caster);
+			return true;
+		}
+		catch (Exception ex)
+		{
+			reason = "native_terrain_destruction_failed:" + ex.GetType().Name;
+			XjExceptionDiagnostics.Report("XjJinDanCombatApi.NativeTerrainDestruction", ex);
+			return false;
+		}
 	}
 
 	internal static bool TryApplyTerrainEffectAtTile(

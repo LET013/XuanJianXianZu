@@ -526,6 +526,50 @@ internal static class XjDengMingShiManager
 		}
 	}
 
+	/// <summary>
+	/// 道胎身毁后的重塑入口。它和故尊命痕不同：不写入 GuZunManifestation，
+	/// 也不改写果位/修为语义；调用者须先完成旧 ActorId 的果位交接。
+	/// 这里刻意不要求原生文明归属，避免龙属、妖属等非文明道胎被错误拒绝。
+	/// </summary>
+	internal static bool TrySpawnDaoTaiResurrection(
+		WorldTile tile,
+		string assetId,
+		string actorName,
+		IReadOnlyList<string> savedTraits,
+		HighRealmSnapshot snapshot,
+		out Actor actor)
+	{
+		actor = null;
+		if (tile == null || snapshot == null || World.world?.units == null) return false;
+		string resolvedAssetId = ResolveRespawnAssetId(assetId, assetId);
+		if (string.IsNullOrWhiteSpace(resolvedAssetId)) return false;
+		try
+		{
+			actor = World.world.units.spawnNewUnit(resolvedAssetId, tile, false, false, 0f, null, false, true);
+			if (actor?.data == null) return false;
+			if (savedTraits != null && savedTraits.Count > 0)
+			{
+				RestoreSavedTraits(actor, savedTraits);
+			}
+			FinalizeRespawnedActor(actor, actorName);
+			if (!RestoreHighRealmSnapshot(actor, snapshot))
+			{
+				XjDengMingShiSpawnSafety.TryRemoveInvalidActor(actor);
+				actor = null;
+				return false;
+			}
+			FinalizeRespawnedActor(actor, actorName);
+			return XjSafeCore.IsAliveActor(actor) && XjDaoTaiSpellScale.IsDaoTaiActor(actor);
+		}
+		catch (Exception exception)
+		{
+			XjExceptionDiagnostics.Report("DengMingShi.DaoTaiResurrection", exception);
+			if (actor != null) XjDengMingShiSpawnSafety.TryRemoveInvalidActor(actor);
+			actor = null;
+			return false;
+		}
+	}
+
 	private static bool ValidateHighRealmArchiveRestore(Actor actor, HighRealmSnapshot snapshot)
 	{
 		if (!XjSafeCore.IsAliveActor(actor) || snapshot == null) return false;

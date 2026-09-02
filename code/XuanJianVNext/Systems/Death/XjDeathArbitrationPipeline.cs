@@ -7,6 +7,7 @@ using XuanJianVNext.Systems.Cultivation;
 using XuanJianVNext.Systems.HighRealm;
 using XuanJianVNext.Systems.Sect;
 using XuanJianVNext.Systems.Shi;
+using XuanJianVNext.Systems.YaoShu;
 
 namespace XuanJianVNext.Systems.Death;
 
@@ -64,7 +65,10 @@ internal static class XjDeathArbitrationPipeline
 		// deaths reach AVBS first；但金性妖邪的阴司死籍属于不可逆终局，不能再触发
 		// Replicative Immortality / Morph 等第三方死亡替身，否则会形成阴司斩杀→替身→再斩的循环。
 		// TechnicalRemoval 同样永不让渡。
-		bool yieldToExternalDeathReplacement = cause != XjDeathCause.TechnicalRemoval
+		// 道胎的不灭优先于第三方的“死亡替身/变形”动作。它们若先吞掉 die，
+		// 最终会绕开道胎免死并直接销毁源 Actor；道胎只能由明确的技术换身事务交接。
+		bool yieldToExternalDeathReplacement = !XjDaoTaiEquivalentExistenceRules.IsProtectedExistence(actor)
+			&& cause != XjDeathCause.TechnicalRemoval
 			&& !irreversibleYaoXieYinSi
 			&& XjExternalUnitTransferContext.HasExternalDeathReplacementTrait(actor);
 		// 0.9.9：道胎/世尊第一层防暴毙。普通死亡在结算入口即被阻断；
@@ -153,6 +157,7 @@ internal static class XjDeathArbitrationPipeline
 			XjGuZunRegistry.FinalizeDeath(actor, state.GuZunArchiveId, state.Cause);
 			if (committed)
 			{
+				XjYaoShuGreatSageSystem.ObserveConfirmedDeath(state.Snapshot, state.Cause);
 				XjDaoTaiMeritSystem.ObserveHighRealmDeath(state.Snapshot, state.Cause);
 				if (state.Cause == XjDeathCause.Combat)
 				{

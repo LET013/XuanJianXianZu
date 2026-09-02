@@ -123,6 +123,42 @@ internal static class XjAvbsTraitPackInterop
         }
     }
 
+    /// <summary>
+    /// 道胎被第三方或原生最终销毁后会以新的 ActorId 重塑真身。这个交接与
+    /// AVBS 换身同样是技术身份迁移：不能触发死亡结算，也不能把家族、宗门、
+    /// 果位、洞天和权柄留在已经不存在的旧 ActorId 上。
+    /// </summary>
+    internal static void RebindAfterDaoTaiResurrection(long oldActorId, Actor target)
+    {
+        if (oldActorId <= 0L || target?.data == null) return;
+        long newActorId = ((BaseSystemData)target.data).id;
+        if (newActorId <= 0L || newActorId == oldActorId) return;
+
+        int handoffYear = Math.Max(1, XjYearTracker.CurrentYear);
+        XjFamilyMemberLedger.RebindActorAfterExternalReplacement(oldActorId, target);
+        XjFamilyIdentityIndex.RebindActorAfterExternalReplacement(oldActorId, newActorId);
+        XjScheduler.PrepareActorRuntimeForTechnicalReplacement(oldActorId);
+        XjActorRegistry.Unregister(oldActorId);
+        XjFaBaoEquipmentSync.RebindEquippedOwnersAfterExternalReplacement(target, oldActorId);
+        XjScheduler.RegisterActor(target);
+
+        XjAlchemyRuntimeRegistry.RebindActorAfterExternalReplacement(oldActorId, newActorId, handoffYear);
+        XjCraftDomainRegistry.RebindActorAfterExternalReplacement(oldActorId, newActorId, handoffYear);
+        XjSectFormationRegistry.RebindLeadActorAfterExternalReplacement(oldActorId, newActorId);
+        XjSecretRealmRegistry.RebindActorAfterExternalReplacement(oldActorId, newActorId);
+        XjQianKunDaiRegistry.RebindActorAfterExternalReplacement(oldActorId, target);
+        XjJinDanImmortalityRegistry.RebindActorAfterExternalReplacement(oldActorId, target, handoffYear);
+        XjDaoTaiPresenceArchive.RebindActorAfterExternalReplacement(oldActorId, target, handoffYear);
+        XjSectCommands.RebindMemberAfterExternalReplacement(oldActorId, target, handoffYear);
+        XjFruitPositionWorldState.RebindDaoTaiBindingAfterExternalReplacement(oldActorId, target);
+
+        XjHighRealmRehydration.ReconcileActor(target, externalSpawn: false);
+        XjJieLinXianRegistry.ReconcileLiveActor(target);
+        XjYuYiXianRegistry.ReconcileLiveActor(target);
+        XjShenDanRegistry.RebindActorAfterExternalReplacement(oldActorId, target);
+        target.setStatsDirty();
+    }
+
     private static void ProcessIndependentClone(Actor actor)
     {
         if (actor?.data == null) return;

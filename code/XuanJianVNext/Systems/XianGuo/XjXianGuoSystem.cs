@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using XuanJianVNext.Core;
 using XuanJianVNext.Data.Rules;
+using XuanJianVNext.Data.Cultivation;
 using XuanJianVNext.Data.Death;
 using XuanJianVNext.Systems.ActorSystem;
 using XuanJianVNext.Systems.Aptitude;
@@ -106,11 +107,15 @@ internal static class XjXianGuoSystem
 		long actorId = ((BaseSystemData)actor.data).id;
 		if (actorId > 0L && ActiveBySovereignId.ContainsKey(actorId)) return true;
 		if (actorId > 0L && TryGetActivePoliticalPlan(actorId, out _)) return true;
-		if (IsDiMingYang(actor)) return true;
+if (IsDiMingYang(actor)) return true;
+	if (IsImperialIntent(actor)) return true;
 		// 普通明阳不再因为“预判帝明阳”进入年度副队列。只有现实中已经
 		// 坐上王位的明阳才需要一次年度兜底，以覆盖旧档加载时没有触发 setKing 的情况。
-		return IsMingYang(actor) && !HasAbdicatedImperialIdentity(actor)
-			&& (IsNativeSovereign(actor) || IsMingYangPoliticalCandidate(actor));
+	if (IsMingYang(actor) && !HasAbdicatedImperialIdentity(actor)
+		&& (IsNativeSovereign(actor) || IsMingYangPoliticalCandidate(actor))) return true;
+	// 读档时原生 setKing 不会重新触发 Postfix；已在位的其他道途修士也要有一次
+	// 低频补验帝意向的机会，但绝不在这里改写王位或国家。
+	return IsNativeSovereign(actor) && IsImperialCultivationEligible(actor);
 	}
 
 	internal static bool HasWorldPoliticalWork
@@ -142,7 +147,23 @@ internal static class XjXianGuoSystem
 
 	internal static string ResolveDaoTuDisplay(Actor actor, string fallback)
 	{
-		return IsDiMingYang(actor) ? "帝明阳" : (fallback ?? string.Empty).Trim();
+		string value = XjDaoTuIntentIdentity.ResolveCore(fallback);
+		if (IsDiMingYang(actor)) return "帝明阳";
+		return IsImperialIntent(actor) ? XjDaoTuIntentIdentity.Compose(XjDaoTuIntentIdentity.DiPrefix, value) : value;
+	}
+
+	/// <summary>
+/// 帝意向以已登记的本道途为凭；读取只作 O(1) 验证，不改写果位或原生王位。
+/// 道途前缀的落盘仅发生在真实登基/破境事务，帝明阳仍保留其独有法统。
+	/// </summary>
+	internal static bool IsImperialIntent(Actor actor)
+	{
+		if (actor?.data == null || IsDiMingYang(actor)) return false;
+		if (!XjActorAccessor.TryGetString(actor, XjActorDataKeys.DiIntentDaoTu, out string marked)) return false;
+		if (string.IsNullOrWhiteSpace(marked)
+			|| !XjActorAccessor.TryGetString(actor, XjActorDataKeys.DaoTu, out string daoTu)
+			|| !string.Equals(marked.Trim(), XjDaoTuIntentIdentity.ResolveCore(daoTu), StringComparison.Ordinal)) return false;
+		return true;
 	}
 
 	/// <summary>
@@ -197,6 +218,17 @@ internal static class XjXianGuoSystem
 	{
 		if (actor?.data == null || !IsDiMingYang(actor) || !TryGetActiveSummary(actor, out XjXianGuoSummary summary)) return 0f;
 		return ResolveBreakthroughSuccessBonus(in summary, targetRealmId);
+	}
+
+	/// <summary>
+	/// 承统并不等于可代代以国法叩果。只有在前代已真正求得果位后才落下此限制；
+	/// 它只拦截自身的求果主链，绝不改动 WorldBox 的原生继承、王位或生育事务。
+	/// </summary>
+	internal static bool IsFruitAttemptSuppressedForHeir(Actor actor)
+	{
+		return actor?.data != null
+			&& XjActorAccessor.TryGetInt(actor, XjActorDataKeys.XianGuoHeirFruitAttemptSuppressed, out int suppressed)
+			&& suppressed > 0;
 	}
 
 	internal static void ObserveDaoTu(Actor actor, string daoTu, int currentYear)
@@ -280,6 +312,10 @@ internal static class XjXianGuoSystem
 		{
 			TryAwakenDiMingYangFromKingship(actor, actor.kingdom, year, out _);
 		}
+		else if (!IsDiMingYang(actor) && !IsMingYang(actor) && IsNativeSovereign(actor))
+		{
+			TryAwakenImperialIntentFromKingship(actor, actor.kingdom, year);
+		}
 
 		if (!IsDiMingYang(actor) && TryGetActivePoliticalPlan(actorId, out XjXianGuoPoliticalPlan activePlan))
 		{
@@ -301,7 +337,7 @@ internal static class XjXianGuoSystem
 			TryStartMingYangPoliticalPlan(actor, year);
 			return;
 		}
-		if (!IsDiMingYang(actor)) return;
+		if (!IsDiMingYang(actor) && !IsImperialIntent(actor)) return;
 
 		if (!TryGetActiveRecord(actorId, out XjXianGuoRecord record))
 		{
@@ -743,6 +779,7 @@ internal static class XjXianGuoSystem
 		long actorId = ((BaseSystemData)actor.data).id;
 		bool shouldHave = actorId > 0L
 			&& !IsDiMingYang(actor)
+			&& !IsImperialIntent(actor)
 			&& XjXianGuoCourtSystem.TryGetOfficer(actorId, out XjXianGuoCourtOfficeRecord office)
 			&& office != null && office.Active && XjXianGuoCourtSystem.IsHeavyMinisterOffice(office);
 		bool has = actor.hasTrait(HeavyMinisterTraitId);
@@ -949,10 +986,11 @@ internal static class XjXianGuoSystem
 			XjXianGuoSummary summary = BuildSummary(sovereignRecord);
 			int effective = Math.Min(summary.NationalPotential, summary.NationalFortune);
 			string status = string.IsNullOrWhiteSpace(summary.Status) ? "仙国行法" : summary.Status.Trim();
-			return "身份：帝明阳　" + summary.DynastyName + "　" + status
-				+ "\n国玄：国势 " + summary.NationalPotential + " / 国运 " + summary.NationalFortune + " / 有效 " + effective
-				+ "\n国朝：" + summary.CityCount + "城　" + summary.Population + "众　立朝" + Math.Max(0, XjYearTracker.CurrentYear - summary.FoundedYear) + "年"
-				+ "\n六象：天光" + summary.TianGuang + "　紫焰" + summary.ZiYan + "　君臣" + summary.JunChen + "　帝皇" + summary.DiHuang
+			return "身份：帝明阳 · " + summary.DynastyName
+				+ "\n国法：" + status
+				+ "\n国势 " + summary.NationalPotential + "　国运 " + summary.NationalFortune + "　有效 " + effective
+				+ "\n" + summary.CityCount + "城 · " + summary.Population + "众 · 立朝" + Math.Max(0, XjYearTracker.CurrentYear - summary.FoundedYear) + "年"
+				+ "\n天光 " + summary.TianGuang + "　紫焰 " + summary.ZiYan + "　君臣 " + summary.JunChen + "　帝皇 " + summary.DiHuang
 				+ ((summary.FuZiXiangSha > 0 || summary.MouNi > 0)
 					? "\n政象：父子相杀" + summary.FuZiXiangSha + "　谋逆" + summary.MouNi : string.Empty);
 		}
@@ -972,10 +1010,10 @@ internal static class XjXianGuoSystem
 			string gradeText = tier >= XjRealmSuppression.TierJinDan && grade > 0 ? "　品秩" + grade : string.Empty;
 			bool heavy = XjXianGuoCourtSystem.IsHeavyMinisterOffice(office);
 			string identity = heavy ? "国之重臣" : "仙朝持玄官";
-			return "身份：" + identity + "　系于" + patronageRecord.DynastyName
-				+ "\n官职：" + office.OfficeName + "　" + XjXianGuoCourtSystem.GetRankDisplay(office.Rank)
-				+ "\n本命：" + trueFate + "　承国之命：+" + nationalFate + "　持玄命数：" + effectiveFate
-				+ "\n仙国道行：" + borrowed + gradeText + (tier > 0 ? "　八成境力" : string.Empty)
+			return "身份：" + identity + " · " + patronageRecord.DynastyName
+				+ "\n官职：" + office.OfficeName + " · " + XjXianGuoCourtSystem.GetRankDisplay(office.Rank)
+				+ "\n本命 " + trueFate + "　承命 +" + nationalFate
+				+ "\n持玄命数 " + effectiveFate + "　" + borrowed + gradeText + (tier > 0 ? " · 八成境力" : string.Empty)
 				+ "\n持玄：以官身承帝统国命而走捷径；国命不入本人真命，不参与正统破境，官去则命归、朝亡则法散。";
 		}
 
@@ -985,8 +1023,8 @@ internal static class XjXianGuoSystem
 			&& officeDynasty != null && officeDynasty.Active && officeDynasty.DynastyId == activeOffice.DynastyId)
 		{
 			string identity = XjXianGuoCourtSystem.IsHeavyMinisterOffice(activeOffice) ? "国之重臣" : "仙朝持玄官";
-			return "身份：" + identity + "　系于" + officeDynasty.DynastyName
-				+ "\n官职：" + activeOffice.OfficeName + "　" + XjXianGuoCourtSystem.GetRankDisplay(activeOffice.Rank)
+			return "身份：" + identity + " · " + officeDynasty.DynastyName
+				+ "\n官职：" + activeOffice.OfficeName + " · " + XjXianGuoCourtSystem.GetRankDisplay(activeOffice.Rank)
 				+ "\n承命：官位已定，国命尚待本朝结算。";
 		}
 
@@ -1015,7 +1053,7 @@ internal static class XjXianGuoSystem
 	{
 		return actor?.data != null
 			&& XjActorAccessor.TryGetString(actor, XjActorDataKeys.DaoTu, out string daoTu)
-			&& string.Equals((daoTu ?? string.Empty).Trim(), MingYangDaoTu, StringComparison.Ordinal);
+			&& string.Equals(XjDaoTuIntentIdentity.ResolveCore(daoTu), MingYangDaoTu, StringComparison.Ordinal);
 	}
 
 	internal static bool IsMingYangCandidate(Actor actor) => IsMingYang(actor);
@@ -1032,6 +1070,76 @@ internal static class XjXianGuoSystem
 	{
 		return actor?.data != null
 			&& (XjCultivationPathRules.IsZiFuJinDan(actor) || XjCultivationPathRules.IsFuQiYangXing(actor));
+	}
+
+	private static bool IsImperialIntentEligible(Actor actor)
+	{
+		return IsImperialCultivationEligible(actor)
+			&& XjRealmSuppression.GetRealmTier(actor) >= XjRealmSuppression.TierZhuJi;
+	}
+
+	internal static void ObserveZhuJiIntentEligibility(Actor actor, int currentYear)
+	{
+		if (actor?.data == null || !actor.isAlive() || !IsNativeSovereign(actor)) return;
+		if (IsMingYang(actor))
+		{
+			TryAwakenDiMingYangFromKingship(actor, actor.kingdom, Math.Max(1, currentYear), out _);
+			return;
+		}
+		if (TryAwakenImperialIntentFromKingship(actor, actor.kingdom, Math.Max(1, currentYear)) || IsImperialIntent(actor))
+		{
+			TryEstablishXianGuo(actor, Math.Max(1, currentYear), out _);
+		}
+	}
+
+	private static bool TryAwakenImperialIntentFromKingship(Actor actor, Kingdom kingdom, int currentYear)
+	{
+		if (actor?.data == null || !actor.isAlive() || kingdom?.data == null || IsDiMingYang(actor)) return false;
+		if (!IsImperialIntentEligible(actor)) return false;
+		if (!XjNativeKingdomSovereignReadBridge.TryResolveSovereign(kingdom, out Actor sovereign) || !SameActor(sovereign, actor)) return false;
+		if (XjActorAccessor.TryGetInt(actor, XjActorDataKeys.DiIntentEvaluated, out int evaluated) && evaluated > 0)
+		{
+			EnsureStoredImperialIntentDaoTu(actor);
+			return IsImperialIntent(actor);
+		}
+		if (!XjActorAccessor.TryGetString(actor, XjActorDataKeys.DaoTu, out string daoTu)) return false;
+		string sourceDaoTu = XjDaoTuIntentIdentity.ResolveCore(daoTu);
+		// 明阳国主继续走既有的唯一帝明阳链，不重复掷骰或削弱其专属身份。
+		if (string.IsNullOrWhiteSpace(sourceDaoTu) || string.Equals(sourceDaoTu, MingYangDaoTu, StringComparison.Ordinal)) return false;
+
+		XjActorAccessor.SetInt(actor, XjActorDataKeys.DiIntentEvaluated, 1);
+		long actorId = ((BaseSystemData)actor.data).id;
+		int year = Math.Max(1, currentYear);
+		if (actorId <= 0L || XjDeterministicHash.PositiveIndex(actorId + (long)year * 31L, sourceDaoTu + "|di_intent", 100) >= 30)
+		{
+			XjWorldArchiveSystem.MarkChanged();
+			return false;
+		}
+
+		XjActorAccessor.SetString(actor, XjActorDataKeys.DiIntentDaoTu, sourceDaoTu);
+		XjActorAccessor.SetString(actor, XjActorDataKeys.DaoTu, XjDaoTuIntentIdentity.Compose(XjDaoTuIntentIdentity.DiPrefix, sourceDaoTu));
+		XjCultivatorCandidateIndex.RefreshDaoTu(actor);
+		XjWorldArchiveSystem.MarkChanged();
+		string realm = XjRealmHelper.GetUnifiedId(actor, XjRealmHelper.GetTraitSnapshotForRouter);
+		XjRealmTitleApplyService.EnsureTitleForRealm(actor, realm, sourceDaoTu);
+		string name = XjStringHelper.ActorName(actor, "未名修士");
+		string body = "【帝意向】" + name + "既承人主之位，帝运与" + sourceDaoTu + "相应；其道相自此显为帝·" + sourceDaoTu + "。";
+		RecordPoliticalHistory("帝意向显现", body, year, actorId, name, 0L, string.Empty);
+		XjBroadcastSystem.ShowRecordedWorldTipCritical(body, color: "#F0B66E", iconId: XjEventIconCatalog.HistoryWorld);
+		return true;
+	}
+
+	private static void EnsureStoredImperialIntentDaoTu(Actor actor)
+	{
+		if (!IsImperialIntent(actor)
+			|| !XjActorAccessor.TryGetString(actor, XjActorDataKeys.DiIntentDaoTu, out string marked)) return;
+		string expected = XjDaoTuIntentIdentity.Compose(XjDaoTuIntentIdentity.DiPrefix, marked);
+		if (string.IsNullOrWhiteSpace(expected)
+			|| !XjActorAccessor.TryGetString(actor, XjActorDataKeys.DaoTu, out string stored)
+			|| string.Equals((stored ?? string.Empty).Trim(), expected, StringComparison.Ordinal)) return;
+		XjActorAccessor.SetString(actor, XjActorDataKeys.DaoTu, expected);
+		XjCultivatorCandidateIndex.RefreshDaoTu(actor);
+		XjCombatHotPathCache.Refresh(actor);
 	}
 
 	private static bool IsNativeSovereign(Actor actor)
@@ -1193,6 +1301,10 @@ internal static class XjXianGuoSystem
 
 		if (IsDiMingYang(sovereign)) EnsureXianGuoForCrownedDiMingYang(sovereign, kingdom, year);
 		else if (IsMingYang(sovereign)) TryAwakenDiMingYangFromKingship(sovereign, kingdom, year, out _);
+		else if (TryAwakenImperialIntentFromKingship(sovereign, kingdom, year) || IsImperialIntent(sovereign))
+		{
+			TryEstablishXianGuo(sovereign, year, out _);
+		}
 	}
 
 	private static void EnsureXianGuoForCrownedDiMingYang(Actor actor, Kingdom kingdom, int year)
@@ -1395,6 +1507,7 @@ internal static class XjXianGuoSystem
 		if (emperorId <= 0L || successorId <= 0L || emperorId == successorId) return;
 
 		string formerImperialName = XjStringHelper.ActorName(emperor, "未名帝明阳修士");
+		ApplyHeirFruitAttemptRestriction(emperorId, successor);
 		record.PreviousSovereignActorId = emperorId;
 		record.PreviousSovereignName = formerImperialName;
 		ActiveBySovereignId.Remove(emperorId);
@@ -1629,16 +1742,20 @@ internal static class XjXianGuoSystem
 	private static void TryEstablishXianGuo(Actor actor, int year, out XjXianGuoRecord record)
 	{
 		record = null;
-		if (actor?.data == null || !actor.isAlive() || !IsDiMingYang(actor)) return;
+		if (actor?.data == null || !actor.isAlive() || (!IsDiMingYang(actor) && !IsImperialIntent(actor))) return;
 		long actorId = ((BaseSystemData)actor.data).id;
-		if (_activeDiMingYangActorId > 0L && _activeDiMingYangActorId != actorId) return;
-		_activeDiMingYangActorId = actorId;
+		if (IsDiMingYang(actor))
+		{
+			if (_activeDiMingYangActorId > 0L && _activeDiMingYangActorId != actorId) return;
+			_activeDiMingYangActorId = actorId;
+		}
 		if (actor.kingdom?.data == null || !IsNativeSovereign(actor)) return;
 		if (ActiveByKingdomId.TryGetValue(actor.kingdom.data.id, out XjXianGuoRecord pending)
 			&& pending != null && pending.Active && pending.SuccessionPending) return;
 		// 仙国法本身从帝明阳真正登基的当年即成立；紫府/真人门槛只属于后续
 		// “众玄归一、假丹成型”，不能再阻断国势国运与法统档案。
-		record = CreateRecord(actor, actor.kingdom, actor.city, Math.Max(1, year), "crowned_mingyang");
+		record = CreateRecord(actor, actor.kingdom, actor.city, Math.Max(1, year),
+			IsDiMingYang(actor) ? "crowned_mingyang" : "crowned_imperial_intent");
 	}
 
 	private static void TryStartMingYangPoliticalPlan(Actor actor, int year)
@@ -1884,6 +2001,7 @@ internal static class XjXianGuoSystem
 	{
 		if (record == null || successor?.data == null) return;
 		long successorId = ((BaseSystemData)successor.data).id;
+		ApplyHeirFruitAttemptRestriction(record.PreviousSovereignActorId, successor);
 		if (record.PreviousSovereignActorId > 0L
 			&& record.PreviousSovereignActorId != successorId
 			&& XjActorRegistry.ResolveKnownOrWorld(record.PreviousSovereignActorId, out Actor previousActor)
@@ -1934,6 +2052,7 @@ internal static class XjXianGuoSystem
 		long oldSovereignId = predecessor.PreviousSovereignActorId;
 		string oldSovereignName = predecessor.PreviousSovereignName;
 
+		ApplyHeirFruitAttemptRestriction(oldSovereignId, successor);
 		EndDynasty(null, predecessor, year, violent ? "谋逆夺位，旧朝法统已易" : "异支入主，旧朝法统已易");
 		XjXianGuoRecord next = CreateRecord(successor, kingdom, successor.city, year, "dynastic_change");
 		if (next == null) return;
@@ -1965,6 +2084,22 @@ internal static class XjXianGuoSystem
 		RecordPoliticalHistory(violent && child ? "父子相杀·改朝" : "改朝换代", body, year,
 			((BaseSystemData)successor.data).id, successorName, oldSovereignId, oldSovereignName);
 		XjBroadcastSystem.ShowRecordedWorldTipCritical(body, color: violent ? "#D98A67" : "#D9B36C");
+	}
+
+	private static void ApplyHeirFruitAttemptRestriction(long predecessorActorId, Actor successor)
+	{
+		if (successor?.data == null || predecessorActorId <= 0L) return;
+		bool predecessorHasFruit = XjGuoWeiRegistry.TryGetStrictActiveEntryByActorId(predecessorActorId, out XjGuoWeiRegistryEntry active)
+			&& active.Found && !string.IsNullOrWhiteSpace(active.GuoWei);
+		if (!predecessorHasFruit)
+		{
+			predecessorHasFruit = XjGuoWeiRegistry.TryGetHistoricalEntry(predecessorActorId, out XjGuoWeiRegistryEntry historical)
+				&& historical.Found && !string.IsNullOrWhiteSpace(historical.GuoWei);
+		}
+		if (predecessorHasFruit)
+		{
+			XjActorAccessor.SetInt(successor, XjActorDataKeys.XianGuoHeirFruitAttemptSuppressed, 1);
+		}
 	}
 
 	private static bool TryGetActivePoliticalPlan(long actorId, out XjXianGuoPoliticalPlan plan)
@@ -2111,7 +2246,8 @@ internal static class XjXianGuoSystem
 		if (!string.Equals(source, "dynastic_change", StringComparison.Ordinal)
 			&& !string.Equals(source, "imperial_restoration", StringComparison.Ordinal))
 		{
-			string body = "【仙国肇基】" + record.SovereignName + "以帝明阳统摄" + record.DynastyName
+			string identity = IsDiMingYang(sovereign) ? "帝明阳" : "帝意向";
+			string body = "【仙国肇基】" + record.SovereignName + "以" + identity + "统摄" + record.DynastyName
 				+ "，自此以国为玄、以众为基，开仙国法。";
 			RecordPoliticalHistory("仙国肇基", body, Math.Max(1, year), actorId, record.SovereignName, 0L, string.Empty);
 			XjBroadcastSystem.ShowRecordedWorldTipCritical(body, color: "#D9B36C", iconId: XjEventIconCatalog.HistoryWorld);
@@ -2203,7 +2339,8 @@ internal static class XjXianGuoSystem
 
 		ApplyImperialAptitudeUplift(sovereign, record);
 		string currentRealmForName = XjRealmHelper.GetUnifiedId(sovereign, XjRealmHelper.GetTraitSnapshotForRouter);
-		XjRealmTitleApplyService.EnsureTitleForRealm(sovereign, currentRealmForName, MingYangDaoTu);
+		XjActorAccessor.TryGetString(sovereign, XjActorDataKeys.DaoTu, out string sovereignDaoTu);
+		XjRealmTitleApplyService.EnsureTitleForRealm(sovereign, currentRealmForName, sovereignDaoTu);
 		// 王号会在证得真金时改成帝君尊号；仙国档案同步跟随当下真实称号，
 		// 后续返真、王统与史册公告不再继续使用旧的“X王”名号。
 		record.SovereignName = XjStringHelper.ActorName(sovereign, "未名帝明阳修士");

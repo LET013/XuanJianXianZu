@@ -142,30 +142,7 @@ internal static class XjActorOverviewStatsFormatter
         SetCoreIconValue(window, HuiGuangIcon.Id, ToNonNegativeInteger(cultivation.HuiGuang));
         SetCoreIconValue(window, ZhenYuanIcon.Id, ToNonNegativeInteger(cultivation.ZhenYuan));
 
-        XjFaBaoBonusProfile profile = BuildOverviewBonusProfile(actor);
-        ApplyPercentRow(window, CombatRow1Name, CombatIcons1, new[]
-        {
-            profile.ArmorPenetration,
-            profile.TrueDamageRatio,
-            profile.AccuracyBonus,
-            profile.CritBonus,
-            profile.AttackSpeedBonus
-        });
-        ApplyPercentRow(window, CombatRow2Name, CombatIcons2, new[]
-        {
-            profile.SameRealmDamageBonus,
-            profile.ShieldBreakBonus,
-            profile.Lifesteal,
-            profile.DamageReduction,
-            profile.HealthShield
-        });
-        ApplyPercentRow(window, CombatRow3Name, CombatIcons3, new[]
-        {
-            profile.DodgeBonus,
-            profile.CritTakenReduction,
-            profile.HealbackBonus,
-            profile.BreakthroughChanceBonus
-        });
+		// 战斗派生属性仍由原生/战斗计算读取，不再在人物概览底部额外生成文本行。
     }
 
     private static bool IsAliveWindowActor(UnitWindow window)
@@ -181,11 +158,10 @@ internal static class XjActorOverviewStatsFormatter
             return false;
         }
 
-        if (content.GetComponent<StatsIconContainer>() == null)
-        {
-            content.gameObject.AddComponent<StatsIconContainer>();
-        }
-
+		// content_more_icons 是原生 UnitStatsElement 的根节点。不能在这里补挂一个
+		// 空 StatsIconContainer：原生 showContent 随后会读取该容器中的 i_lifespan，
+		// 空容器会令其在 UnitStatsElement:64 空引用。玄鉴仅克隆 i_kills 图标，
+		// 不接管或补造原生属性根容器。
         RemoveLegacyDedicatedCoreRow(content);
 
         Transform nativeKillsRow = FindNativeKillsRow(content);
@@ -195,32 +171,14 @@ internal static class XjActorOverviewStatsFormatter
             return false;
         }
 
-        RemoveLegacyInlineCombatIcons(nativeKillsRow);
-        if (!EnsureCoreIconsInline(nativeKillsRow, kills))
+		RemoveLegacyInlineCombatIcons(nativeKillsRow);
+		RemoveLegacyCombatRows(content);
+		if (!EnsureCoreIconsInline(nativeKillsRow, kills))
         {
             return false;
         }
 
-        int insertionIndex = nativeKillsRow.GetSiblingIndex() + 1;
-        for (int i = 0; i < CombatRows.Length; i++)
-        {
-            Transform row = content.Find(CombatRows[i].Name);
-            if (row != null)
-            {
-                // 0.9.9.12~0.9.9.16 已经写进存量 UnitWindow 的战斗行也可能继承
-                // 原生 UnitStatsElement。打开新包后第一次刷新时就地清掉，不要求窗口重建。
-                StripNativeMetaLifecycleRecursive(row);
-                continue;
-            }
-
-            row = CreateStableRow(content, nativeKillsRow, CombatRows[i], insertionIndex + i);
-            if (row == null)
-            {
-                return false;
-            }
-        }
-
-        return true;
+		return true;
     }
 
     private static bool EnsureCoreIconsInline(Transform nativeKillsRow, Transform kills)
@@ -284,12 +242,12 @@ internal static class XjActorOverviewStatsFormatter
         }
     }
 
-    private static void RemoveLegacyInlineCombatIcons(Transform nativeKillsRow)
+	private static void RemoveLegacyInlineCombatIcons(Transform nativeKillsRow)
     {
         if (nativeKillsRow == null)
         {
             return;
-        }
+		}
 
         for (int r = 0; r < CombatRows.Length; r++)
         {
@@ -304,6 +262,20 @@ internal static class XjActorOverviewStatsFormatter
             }
         }
     }
+
+	private static void RemoveLegacyCombatRows(Transform content)
+	{
+		if (content == null) return;
+		for (int i = 0; i < CombatRows.Length; i++)
+		{
+			Transform row = content.Find(CombatRows[i].Name);
+			if (row != null)
+			{
+				// 只删除玄鉴自建行；不触碰任何原生 LayoutGroup 或属性节点。
+				UnityEngine.Object.DestroyImmediate(row.gameObject);
+			}
+		}
+	}
 
     private static Transform CreateStableRow(
         Transform content,

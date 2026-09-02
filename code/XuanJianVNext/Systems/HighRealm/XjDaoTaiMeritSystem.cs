@@ -39,6 +39,7 @@ internal static class XjDaoTaiMeritSystem
 	internal const int DaoTaiKillMerit = 160;
 	internal const int ZhengWeiKillBonus = 40;
 	internal const int LongShuKillMerit = 80;
+	internal const int GreatSageKillMerit = 120;
 	internal const int DefeatYinSiMerit = 100;
 
 	private static readonly HashSet<string> FirstProvenDaoTus = new HashSet<string>(StringComparer.Ordinal);
@@ -101,16 +102,17 @@ internal static class XjDaoTaiMeritSystem
 	{
 		bool victimIsLongShu = (snapshot.RaceKey ?? string.Empty)
 			.IndexOf("longshu", StringComparison.OrdinalIgnoreCase) >= 0;
+		bool victimIsGreatSage = XjYaoShuGreatSageSystem.IsGreatSageRaceKey(snapshot.RaceKey);
 		string victimRealm = XjRealmHelper.NormalizeId(snapshot.RealmId);
 		bool victimIsSupportedHighRealm = XjHighRealmIdentity.IsHighRealm(victimRealm);
 		if (cause != XjDeathCause.Combat
 			|| !snapshot.Found
 			|| snapshot.LastAttackerId <= 0L
 			|| snapshot.LastAttackerId == snapshot.ActorId
-			|| (!victimIsLongShu && !victimIsSupportedHighRealm)
+			|| (!victimIsLongShu && !victimIsGreatSage && !victimIsSupportedHighRealm)
 			|| !XjActorRegistry.ResolveKnownOrWorld(snapshot.LastAttackerId, out Actor killer)
 			|| !XjSafeCore.IsAliveActor(killer)
-			|| !IsEligibleMeritBearer(killer))
+			|| !(victimIsGreatSage ? IsEligibleGreatSageKiller(killer) : IsEligibleMeritBearer(killer)))
 		{
 			return;
 		}
@@ -121,6 +123,13 @@ internal static class XjDaoTaiMeritSystem
 				killer,
 				LongShuKillMerit,
 				"斩落龙属" + (string.IsNullOrWhiteSpace(snapshot.Name) ? string.Empty : "“" + snapshot.Name + "”"),
+				snapshot.Year);
+			return;
+		}
+		if (victimIsGreatSage)
+		{
+			Award(killer, GreatSageKillMerit,
+				"斩落妖属大圣" + (string.IsNullOrWhiteSpace(snapshot.Name) ? string.Empty : "“" + snapshot.Name + "”"),
 				snapshot.Year);
 			return;
 		}
@@ -397,6 +406,16 @@ internal static class XjDaoTaiMeritSystem
 		string normalized = XjRealmHelper.NormalizeId(realmId);
 		return string.Equals(normalized, XjRealmIds.JinDan, StringComparison.Ordinal)
 			|| string.Equals(normalized, XjRealmIds.ZhenJunYuShi, StringComparison.Ordinal);
+	}
+
+	private static bool IsEligibleGreatSageKiller(Actor actor)
+	{
+		if (IsEligibleMeritBearer(actor)) return true;
+		if (actor?.data == null
+			|| !XjActorAccessor.TryGetString(actor, XjActorDataKeys.RealmId, out string realmId)) return false;
+		string normalized = XjRealmHelper.NormalizeId(realmId);
+		return string.Equals(normalized, XjRealmIds.DaoTai, StringComparison.Ordinal)
+			|| string.Equals(normalized, XjRealmIds.FuQiDaoTai, StringComparison.Ordinal);
 	}
 
 	private static bool IsPeakHighRealmRoute(Actor actor)

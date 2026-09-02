@@ -23,8 +23,6 @@ using XuanJianVNext.Systems.Archive;
 using XuanJianVNext.Systems.Runtime;
 using XuanJianVNext.Systems.XianGuo;
 using XuanJianVNext.Systems.Events;
-using XuanJianVNext.Systems.YaoShu;
-
 using XuanJianVNext.Systems.Aptitude;
 
 namespace XuanJianVNext.Patches;
@@ -41,10 +39,8 @@ internal static class XjVNextDebugTraitHandler
     internal const string DebugMingShuTraitId = "DebugMingShu";
     internal const string DebugHuiGuangTraitId = "DebugHuiGuang";
     internal const string DebugSwordIntentTraitId = "DebugSwordIntent";
-    internal const string DebugDiMingYangCrownTraitId = "DebugDiMingYangCrown";
     internal const string DebugFaBaoDengXianTraitId = "DebugFaBaoDengXian";
     internal const string DebugLuoXiaInquiryTraitId = "DebugLuoXiaInquiry";
-    internal const string DebugYaoShuGreatSageManifestTraitId = "DebugYaoShuGreatSageManifest";
     internal const string DebugEnterGuShiTraitId = "DebugEnterGuShi";
     internal const string DebugEnterJinShiTraitId = "DebugEnterJinShi";
     internal const string DebugShiGreatDesireTraitId = "DebugShiGreatDesire";
@@ -83,10 +79,8 @@ internal static class XjVNextDebugTraitHandler
         DebugMingShuTraitId,
         DebugHuiGuangTraitId,
         DebugSwordIntentTraitId,
-        DebugDiMingYangCrownTraitId,
         DebugFaBaoDengXianTraitId,
         DebugLuoXiaInquiryTraitId,
-        DebugYaoShuGreatSageManifestTraitId,
     };
 
     private static int LastDebugInterventionIssueLogFrame = -100000;
@@ -192,17 +186,11 @@ internal static class XjVNextDebugTraitHandler
                 case DebugSwordIntentTraitId:
                     TryTriggerDebugSwordIntent(actor);
                     break;
-                case DebugDiMingYangCrownTraitId:
-                    TryTriggerDebugDiMingYangCrown(actor);
-                    break;
                 case DebugFaBaoDengXianTraitId:
                     TryTriggerDebugFaBaoDengXian(actor);
                     break;
                 case DebugLuoXiaInquiryTraitId:
                     TryTriggerDebugLuoXiaInquiry(actor);
-                    break;
-                case DebugYaoShuGreatSageManifestTraitId:
-                    TryTriggerDebugYaoShuGreatSageManifest(actor);
                     break;
                 case DebugJinDanReincarnationTraitId:
                     TryTriggerDebugJinDanReincarnation(actor);
@@ -269,24 +257,6 @@ internal static class XjVNextDebugTraitHandler
         }
 
         return actor != null && actor.data != null && XjSafeCore.IsAliveActor(actor);
-    }
-
-    // ====== Handler: DebugYaoShuGreatSageManifest（妖圣化生） ======
-    private static void TryTriggerDebugYaoShuGreatSageManifest(Actor actor)
-    {
-        if (!XjSafeCore.IsAliveActor(actor))
-        {
-            TryClearDebugInterventionTrait(actor, DebugYaoShuGreatSageManifestTraitId);
-            return;
-        }
-
-        int manifested = XjYaoShuGreatSageSystem.TryDebugManifestAll(Math.Max(0, XjYearTracker.CurrentYear));
-        TryClearDebugInterventionTrait(actor, DebugYaoShuGreatSageManifestTraitId);
-        TryLogDebugInterventionSuccess(
-            actor,
-            DebugYaoShuGreatSageManifestTraitId,
-            "great_sage_manifest_attempted",
-            "manifested=" + manifested.ToString(CultureInfo.InvariantCulture));
     }
 
     private static bool IsDebugInterventionTraitId(string traitId)
@@ -862,57 +832,6 @@ internal static class XjVNextDebugTraitHandler
         }
         TryLogDebugInterventionSuccess(actor, DebugSwordIntentTraitId, "sword_intent_granted",
             "alias=" + alias + " count=" + XjSwordIntentRegistry.Count + " swordEquipped=true");
-    }
-
-    // ====== Handler: DebugDiMingYangCrown（帝统明阳） ======
-    private static void TryTriggerDebugDiMingYangCrown(Actor actor)
-    {
-        if (!XjSafeCore.IsAliveActor(actor))
-        {
-            TryClearDebugInterventionTrait(actor, DebugDiMingYangCrownTraitId);
-            return;
-        }
-
-        if (!XjXianGuoSystem.IsMingYangCandidate(actor) || XjXianGuoSystem.IsDiMingYang(actor))
-        {
-            TryClearDebugInterventionTrait(actor, DebugDiMingYangCrownTraitId);
-            TryLogDebugInterventionIssue(actor, DebugDiMingYangCrownTraitId, "not_mingyang_candidate", "requires_mingyang");
-            return;
-        }
-
-        if (!XjXianGuoSystem.CanCrownAsDiMingYang(actor, out string preflightReason))
-        {
-            TryClearDebugInterventionTrait(actor, DebugDiMingYangCrownTraitId);
-            TryLogDebugInterventionIssue(actor, DebugDiMingYangCrownTraitId, "imperial_crown_blocked", preflightReason);
-            return;
-        }
-
-        if (XjActorAccessor.TryGetInt(actor, XjActorDataKeys.XjDebugDiMingYangCrownUsed, out int used) && used > 0)
-        {
-            TryClearDebugInterventionTrait(actor, DebugDiMingYangCrownTraitId);
-            TryLogDebugInterventionIssue(actor, DebugDiMingYangCrownTraitId, "already_used", "once_per_actor");
-            return;
-        }
-
-        if (!XjNativeKingdomSovereignWriteBridge.TrySetExistingKingdomSovereign(actor, out string reason))
-        {
-            TryClearDebugInterventionTrait(actor, DebugDiMingYangCrownTraitId);
-            TryLogDebugInterventionIssue(actor, DebugDiMingYangCrownTraitId, "crown_failed", reason);
-            return;
-        }
-
-        int year = Math.Max(1, GetCurrentYear(actor));
-        if (!XjXianGuoSystem.TryAwakenDiMingYangFromKingship(actor, actor.kingdom, year, out string awakenReason))
-        {
-            TryClearDebugInterventionTrait(actor, DebugDiMingYangCrownTraitId);
-            TryLogDebugInterventionIssue(actor, DebugDiMingYangCrownTraitId, "di_mingyang_awaken_failed", awakenReason);
-            return;
-        }
-
-        XjActorAccessor.SetInt(actor, XjActorDataKeys.XjDebugDiMingYangCrownUsed, 1);
-        XjWorldArchiveSystem.MarkChanged();
-        TryClearDebugInterventionTrait(actor, DebugDiMingYangCrownTraitId);
-        TryLogDebugInterventionSuccess(actor, DebugDiMingYangCrownTraitId, "mingyang_crowned_to_di_mingyang", "year=" + year);
     }
 
     // ====== Handler: DebugFaBaoDengXian（法宝登仙） ======

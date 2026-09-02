@@ -693,7 +693,7 @@ internal static class XjFuQiToZiFuTransitionSystem
 			XjActorDataKeys.XjQiuJinFaName, XjActorDataKeys.XjQiuJinFaSourceGongFaName,
 			XjActorDataKeys.XjQiuJinFaSourceDaoTu, XjActorDataKeys.XjQiuJinFaBoundAuthority,
 			XjActorDataKeys.XjQiuJinFaOrigin, XjActorDataKeys.XjQiuJinFaLastFailureReason,
-			XjActorDataKeys.XjJinDanJinXing, XjActorDataKeys.XjJinDanGuoWei,
+			XjActorDataKeys.XjJinDanJinXing, XjActorDataKeys.XjJinDanGuoWei, XjActorDataKeys.XjJinDanPositionPursuit,
 			XjActorDataKeys.XjJinDanFailedState, XjActorDataKeys.XjJinDanFailureNarrative,
 			XjActorDataKeys.XjJinDanDeferredReason, XjActorDataKeys.XjQiuJinIntentReason,
 			XjActorDataKeys.XjShenDanGuoWei, XjActorDataKeys.XjShenDanAnchorName,

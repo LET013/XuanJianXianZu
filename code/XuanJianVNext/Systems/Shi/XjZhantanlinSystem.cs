@@ -12,6 +12,7 @@ using XuanJianVNext.Systems.ActorSystem;
 using XuanJianVNext.Systems.Cultivation;
 using XuanJianVNext.Systems.Combat;
 using XuanJianVNext.Systems.Runtime;
+using XuanJianVNext.Systems.YaoShu;
 
 namespace XuanJianVNext.Systems.Shi;
 
@@ -758,6 +759,13 @@ internal static class XjZhantanlinSystem
 	private static SanctuaryIntruderResult EnforceSanctuaryOccupant(Actor actor, int year, bool announceConversion)
 	{
 		if (actor?.data == null || !actor.isAlive() || !IsInside(actor)) return SanctuaryIntruderResult.None;
+		// 大圣不入释土，也不留在林内等待摄化。仅复用金丹/真君的原生实体
+		// 瞬移原语将其送至附近安全外界格，不建立第二套移动或领域状态。
+		if (XjYaoShuGreatSageSystem.IsGreatSage(actor))
+		{
+			TryEjectGreatSage(actor);
+			return SanctuaryIntruderResult.None;
+		}
 		if (XjCultivationPathRules.IsShi(actor))
 		{
 			ApplySanctuaryPeace(actor);
@@ -1439,6 +1447,14 @@ internal static class XjZhantanlinSystem
 		bool targetInside = targetProtected
 			&& IsInsideCached(target.x, target.y, centerX, centerY, radius);
 		bool isShi = XjCultivationPathRules.IsShi(actor);
+		if (currentInside && XjYaoShuGreatSageSystem.IsGreatSage(actor))
+		{
+			if (TryEjectGreatSage(actor))
+			{
+				result = ExecuteEvent.True;
+				return true;
+			}
+		}
 
 		// 与幽冥的处理边界一致：只有角色真实身处领域，才执行摄化/抹除。
 		if (currentInside && !isShi)
@@ -1507,6 +1523,13 @@ internal static class XjZhantanlinSystem
 		// 重挂地图/Region，再由下一拍AI重新决策。不能继续用低层 setCurrentTilePosition
 		// 留下跨领域旧任务与半更新Region状态。
 		return XjHighRealmMovement.TryImmediateDomainTransfer(actor, target);
+	}
+
+	private static bool TryEjectGreatSage(Actor actor)
+	{
+		if (actor?.data == null || !IsInside(actor)) return false;
+		return TryGetSafeOutsideTile(GetActorId(actor), out WorldTile target)
+			&& TryTeleportOutside(actor, target);
 	}
 
 	private static void CancelSanctuaryRoute(Actor actor, bool resetBehaviour = false,

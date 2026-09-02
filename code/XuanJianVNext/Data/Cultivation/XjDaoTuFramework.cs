@@ -332,5 +332,31 @@ internal static class XjDaoTuCatalog
 		return result;
 	}
 
-	private static string Normalize(string value) => (value ?? string.Empty).Trim();
+	private static string Normalize(string value) => XjDaoTuIntentIdentity.ResolveCore(value);
+}
+
+/// <summary>
+/// 妖、帝意向是对同一修炼道途的身份覆名。数据层只在边界剥去前缀，
+/// 让果位、神通、功法继续使用既有本道索引，不复制任何目录或年度扫描。
+/// </summary>
+internal static class XjDaoTuIntentIdentity
+{
+	internal const string YaoPrefix = "妖·";
+	internal const string DiPrefix = "帝·";
+
+	internal static string ResolveCore(string value)
+	{
+		string text = (value ?? string.Empty).Trim();
+		while (text.StartsWith(YaoPrefix, StringComparison.Ordinal) || text.StartsWith(DiPrefix, StringComparison.Ordinal))
+		{
+			text = text.Substring(2).Trim();
+		}
+		return text;
+	}
+
+	internal static string Compose(string prefix, string daoTu)
+	{
+		string core = ResolveCore(daoTu);
+		return string.IsNullOrWhiteSpace(core) ? string.Empty : prefix + core;
+	}
 }

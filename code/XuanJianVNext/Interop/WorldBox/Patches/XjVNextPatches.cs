@@ -29,6 +29,7 @@ using XuanJianVNext.UI.Family;
 using XuanJianVNext.Systems.HighRealm;
 using XuanJianVNext.Systems.Era;
 using XuanJianVNext.Systems.LongShu;
+using XuanJianVNext.Systems.YaoShu;
 using XuanJianVNext.Systems.Visual;
 using XuanJianVNext.Core;
 using XuanJianVNext.UI.ActorInfo;
@@ -156,6 +157,22 @@ internal partial class XjVNextPatches
 		}
 
 		__result = XjLongShuSystem.TryGetBannerSprite();
+		return false;
+	}
+
+	[HarmonyPrefix]
+	[HarmonyPriority(Priority.First)]
+	[HarmonyPatch(typeof(Subspecies), "getUnitSpriteForBanner")]
+	private static bool XuanJian_Subspecies_GetUnitSpriteForBanner_YaoShuGreatSage_Prefix(Subspecies __instance, ref Sprite __result)
+	{
+		if (!XjYaoShuGreatSageSystem.IsGreatSageSubspecies(__instance))
+		{
+			return true;
+		}
+
+		// 大圣实际战斗外观由自己的帧库驱动，不能让原生横幅再依赖 walk_0。
+		// 这只返回已加载的首帧，不改亚种、王国或原生单位容器。
+		__result = XjYaoShuGreatSageSystem.TryGetBannerSprite(__instance);
 		return false;
 	}
 

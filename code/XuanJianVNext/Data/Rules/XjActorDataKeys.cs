@@ -284,11 +284,16 @@ internal static class XjActorDataKeys
 	// 证得真金后主动禅让过帝统的人物永久记为退帝，避免原生政治AI日后把其
 	// 再次推上王位时重新触发帝明阳，破坏“禅位后新帝唯一”的法统语义。
 	public const string DiMingYangAbdicated = "xuanjian.vnext.mingyang.imperial.abdicated";
+	// 妖、帝意向是对既有道途的身份投影，不是可手动编辑的特质；值始终保存其原本道途。
+	public const string YaoIntentDaoTu = "xuanjian.vnext.yao.intent.daotu";
+	public const string DiIntentDaoTu = "xuanjian.vnext.di.intent.daotu";
+	public const string DiIntentEvaluated = "xuanjian.vnext.di.intent.evaluated";
 	// 帝明阳破境时用于去重/存档的国势反哺基准位格。只记录真实大境界 Tier，不代表借玄战力。
 	public const string DiMingYangPatronageRealmTier = "xuanjian.vnext.mingyang.imperial.patronage_realm_tier";
-	// 陆江仙模拟器“帝统明阳”每名角色终身只允许成功执行一次。
-	public const string XjDebugDiMingYangCrownUsed = "xuanjian.vnext.debug.diminyang_crown.used";
 	public const string XianGuoDynastyId = "xuanjian.vnext.xianguo.dynasty_id";
+	// 前代帝君已经求得真实果位时，其承统后嗣不再以仙国继承之身叩问果位。
+	// 这是人物终身的法统限制，不是百官借玄或原生王位状态。
+	public const string XianGuoHeirFruitAttemptSuppressed = "xuanjian.vnext.xianguo.heir.fruit_attempt_suppressed";
 	public const string XianGuoBorrowedTier = "xuanjian.vnext.xianguo.borrowed_tier";
 	public const string XianGuoBorrowedGrade = "xuanjian.vnext.xianguo.borrowed_grade";
 	// 百官通过仙国法获得的是制度性持玄投影，不改写本人真实修炼境界。
@@ -403,6 +408,8 @@ internal static class XjActorDataKeys
 	public const string XjJinDanFailedState = "xuanjian.vnext.jindan.failed_state";
 	public const string XjJinDanFailureNarrative = "xuanjian.vnext.jindan.failure_narrative";
 	public const string XjJinDanDeferredReason = "xuanjian.vnext.jindan.deferred_reason";
+	// 正果已由活着的持位者占据时，求证者转而叩问本道余位；只在同一根本道途内生效。
+	public const string XjJinDanPositionPursuit = "xuanjian.vnext.jindan.position_pursuit";
 	// 求金之志：0=未定，1=志在叩金，2=止步紫府，3=静候上修扶金。
 	// 它替代旧版“每年再抽一次是否想求金”的触发概率，只在资质或扶金阶段发生变化时重算。
 	public const string XjQiuJinIntentState = "xuanjian.vnext.qiujin.intent.state";

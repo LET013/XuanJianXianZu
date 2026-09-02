@@ -48,7 +48,8 @@ internal static class XjXianJiCatalog
 		{ "听曜辰", "听醒辰" },
 		{ "东利山", "东羽山" },
 		{ "西天璟", "西天塬" },
-		{ "南悯水", "南惆水" }
+		{ "南悯水", "南惆水" },
+		{ "寒世天", "青霄女" }
 	};
 
 	private static readonly Dictionary<string, string[]> DaoTuXianJiMap = new Dictionary<string, string[]>(StringComparer.Ordinal)
@@ -69,7 +70,7 @@ internal static class XjXianJiCatalog
 		{ "坎水", new[] { "溪上翁", "浩瀚海", "位从险", "长云暗", "恨江去", "入坎窞" } },
 		{ "府水", new[] { "朝寒雨", "合黎渊", "宿穷冬", "广浚湖" } },
 		{ "合水", new[] { "归流处", "谶在兹", "广准圣", "诸合还", "妖渎河" } },
-		{ "牝水", new[] { "往生泉", "佞无晨", "谿谷会", "参玄臟" } },
+		{ "牝水", new[] { "佞无晨", "往生泉", "谿谷会", "参玄臟", "照夭胎" } },
 		{ "渌水", new[] { "洞泉声", "清夕雨", "丑癸藏", "如重浊", "洗劫露" } },
 		{ "离火", new[] { "位从罗", "顺平征", "大离书", "九重擭", "折焚尽" } },
 		{ "真火", new[] { "天兜火", "雉离行", "真火身", "燎原势", "炼乾坤" } },
@@ -92,7 +93,7 @@ internal static class XjXianJiCatalog
 		{ "邃炁", new[] { "代行妨", "闇天殃", "逆人伦", "众生苦", "乱天理" } },
 		{ "紫炁", new[] { "绕东山", "列紫篇", "坤辰修", "养生主" } },
 		{ "真炁", new[] { "抱石眠", "霞羽客", "鹤挂衣", "授长生", "蜕凡尘" } },
-		{ "寒炁", new[] { "松上雪", "入清听", "祢水寒", "沆砀满", "寒世天" } },
+		{ "寒炁", new[] { "入清听", "松上雪", "祢水寒", "沆砀满", "青霄女" } },
 		{ "晞炁", new[] { "未阕华", "乞代夜", "郁燠苦", "庆垂轩", "议八辟" } },
 		{ "瑞炁", new[] { "好功箓", "瑞气云", "祥云现", "福星照", "瑞炁祥" } },
 		{ "煞炁", new[] { "不空劫", "罗剎海", "人中屠", "戮天元" } },
@@ -180,7 +181,7 @@ internal static class XjXianJiCatalog
 		{ "坎水", new[] { "溪上翁", "入坎窞", "浩瀚海", "长云暗", "恨江去", "位从险" } },
 		{ "府水", new[] { "朝寒雨", "合黎渊", "宿穷冬", "广浚湖" } },
 		{ "合水", new[] { "归流处", "谶在兹", "广准圣", "诸合还", "妖渎河" } },
-		{ "牝水", new[] { "佞无晨", "往生泉", "谿谷会", "参玄臟" } },
+		{ "牝水", new[] { "佞无晨", "往生泉", "谿谷会", "参玄臟", "照夭胎" } },
 		{ "渌水", new[] { "如重浊", "洞泉声", "清夕雨", "丑癸藏", "洗劫露" } },
 		{ "离火", new[] { "顺平征", "位从罗", "大离书", "九重擭", "折焚尽" } },
 		{ "真火", new[] { "雉离行", "天兜火", "治命神" } },
@@ -197,7 +198,7 @@ internal static class XjXianJiCatalog
 		{ "邃炁", new[] { "代行妨", "闇天殃" } },
 		{ "紫炁", new[] { "绕东山", "列紫篇", "道始兆", "坤辰修", "养生主" } },
 		{ "真炁", new[] { "抱石眠", "霞羽客", "鹤挂衣", "授长生" } },
-		{ "寒炁", new[] { "入清听", "松上雪", "祢水寒", "沆砀满" } },
+		{ "寒炁", new[] { "入清听", "松上雪", "祢水寒", "沆砀满", "青霄女" } },
 		{ "晞炁", new[] { "未阕华", "乞代夜", "郁燠苦", "庆垂轩", "议八辟" } },
 		{ "瑞炁", new[] { "好功箓", "瑞气云" } },
 		{ "煞炁", new[] { "不空劫", "罗剎海", "箝恨口" } },
@@ -1479,7 +1480,7 @@ internal static class XjXianJiCatalog
 
 	private static string NormalizeDaoTu(string daoTu)
 	{
-		string text = (daoTu ?? string.Empty).Trim();
+		string text = XjDaoTuIntentIdentity.ResolveCore(daoTu);
 		return !string.IsNullOrWhiteSpace(text) && XjDaoTuVisibleTraitCatalog.TryResolveTraitId(text, out _)
 			? text
 			: string.Empty;

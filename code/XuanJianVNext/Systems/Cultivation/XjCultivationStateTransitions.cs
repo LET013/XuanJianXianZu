@@ -10,6 +10,7 @@ using XuanJianVNext.Systems.Events;
 using XuanJianVNext.Systems.Family;
 using XuanJianVNext.Systems.WeaponArt;
 using XuanJianVNext.Systems.XianGuo;
+using XuanJianVNext.Systems.YaoShu;
 
 namespace XuanJianVNext.Systems.Cultivation;
 
@@ -186,6 +187,13 @@ internal static class XjCultivationStateTransitions
 		XjXianJiAccessor.ReconcileRealmLimit(actor);
 		XjActorGongFaCollection.ReconcileWithActor(actor, "RealmTransition");
 		XjActorGongFaCollection.ReconcileGradeCap(actor, "RealmTransitionGradeCap");
+		if (string.Equals(realmId, XjRealmIds.ZhuJi, StringComparison.Ordinal))
+		{
+			// 只在本次真实筑基写入时处理，不对世界角色做额外扫描。
+			XjYaoShuHalfBloodlineSystem.TryAwakenYaoIntentAtZhuJi(actor);
+			XjXianGuoSystem.ObserveZhuJiIntentEligibility(actor,
+				XuanJianVNext.Systems.Runtime.XjAnnualExecutionContext.ResolveYear(actor));
+		}
 		if (IsBelowZiFu(realmId))
 		{
 			XjQiuJinFaAccessor.Clear(actor, "RealmBelowZiFu");

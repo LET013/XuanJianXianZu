@@ -6,6 +6,7 @@ using UnityEngine;
 using XuanJianVNext.Core;
 using XuanJianVNext.Data.History;
 using XuanJianVNext.Data.HighRealm;
+using XuanJianVNext.Data.Death;
 using XuanJianVNext.Systems.ActorSystem;
 using XuanJianVNext.Systems.Archive;
 using XuanJianVNext.Systems.Broadcast;
@@ -15,6 +16,7 @@ using XuanJianVNext.Systems.HighRealm;
 using XuanJianVNext.Systems.History;
 using XuanJianVNext.Systems.Combat;
 using XuanJianVNext.Systems.Cultivation;
+using XuanJianVNext.Systems.Shi;
 using XuanJianVNext.Data.Rules;
 using XuanJianVNext.Interop.WorldBox;
 
@@ -37,8 +39,12 @@ internal static class XjYaoShuGreatSageSystem
 
 	private const string StableActorTemplateId = "civ_seal";
 	private const int ManifestationStartYear = 300;
-	private const int ManifestationCheckIntervalYears = 50;
-	private const float ManifestationChance = 0.5f;
+	// 大圣的降临不是短周期刷怪。每二百年只开一次天数窗口，窗口内再随机落下三至五席。
+	private const int ManifestationCheckIntervalYears = 200;
+	private const int RequiredIndependentZhenJunCount = 3;
+	private const int PopulationManifestationThreshold = 4000;
+	private const int MinimumManifestationBatchSize = 3;
+	private const int MaximumManifestationBatchSize = 5;
 	private const int StrategicPulseYears = 10;
 	private const int SpawnProbeBudget = 96;
 	private const int SpriteFrameCount = 6;
@@ -318,6 +324,8 @@ internal static class XjYaoShuGreatSageSystem
 		if (World.world?.units == null || !_assetsInitialized) return;
 
 		bool changed = false;
+		// 先完成十二席的存亡对账，再从同一批到期空席中随机抽取三至五席。
+		// 不能在逐槽循环中即时化生，否则定义数组的先后顺序会固定每一轮的降临者。
 		for (int i = 0; i < Definitions.Length; i++)
 		{
 			Definition definition = Definitions[i];
@@ -360,14 +368,26 @@ internal static class XjYaoShuGreatSageSystem
 				changed = true;
 			}
 
-			if (currentYear < ManifestationStartYear || currentYear < state.NextAttemptYear || !CanAttemptManifestation(definition)) continue;
-			if (XjGuoWeiRegistry.IsPermanentlyLockedGuoWei(definition.FruitId))
-			{
-				state.NextAttemptYear = ScheduleNextAttempt(definition, currentYear);
-				changed = true;
-				continue;
-			}
-			if (!RollManifestation(definition, currentYear))
+		}
+
+		bool hasManifestationCondition = HasManifestationCondition();
+		// 绝大多数年份没有到期空席，不创建候选 List/HashSet，也不读取果位表。
+		HashSet<int> selectedSlots = hasManifestationCondition && HasDueManifestationSlot(currentYear)
+			? SelectManifestationBatch(currentYear)
+			: null;
+		for (int i = 0; i < Definitions.Length; i++)
+		{
+			Definition definition = Definitions[i];
+			SlotState state = States[i];
+			if (state.ActorId > 0L
+				|| currentYear < ManifestationStartYear
+				|| currentYear < state.NextAttemptYear
+				|| !CanAttemptManifestation(definition)) continue;
+
+			if (!hasManifestationCondition
+				|| selectedSlots == null
+				|| !selectedSlots.Contains(i)
+				|| IsFruitHeldByLivingRealActor(definition.FruitId))
 			{
 				state.NextAttemptYear = ScheduleNextAttempt(definition, currentYear);
 				changed = true;
@@ -379,6 +399,7 @@ internal static class XjYaoShuGreatSageSystem
 				CommitManifestationState(state, manifested, currentYear);
 				changed = true;
 				XjYaoShuSapientSpecies.TryAwakenForGreatSage(definition.SlotId, manifested.current_tile, currentYear);
+				XjYaoShuHalfBloodlineSystem.TryBestowAfterGreatSage(manifested, definition.SlotId, currentYear);
 				RecordManifestation(manifested, definition, currentYear);
 			}
 			else
@@ -465,7 +486,7 @@ internal static class XjYaoShuGreatSageSystem
 				changed = true;
 			}
 			if (!CanAttemptManifestation(definition)) continue;
-			if (XjGuoWeiRegistry.IsPermanentlyLockedGuoWei(definition.FruitId))
+			if (IsFruitHeldByLivingRealActor(definition.FruitId))
 			{
 				state.NextAttemptYear = ScheduleNextAttempt(definition, currentYear);
 				changed = true;
@@ -477,6 +498,7 @@ internal static class XjYaoShuGreatSageSystem
 				manifestedCount++;
 				changed = true;
 				XjYaoShuSapientSpecies.TryAwakenForGreatSage(definition.SlotId, manifested.current_tile, currentYear);
+				XjYaoShuHalfBloodlineSystem.TryBestowAfterGreatSage(manifested, definition.SlotId, currentYear);
 				RecordManifestation(manifested, definition, currentYear);
 			}
 			else
@@ -713,6 +735,11 @@ internal static class XjYaoShuGreatSageSystem
 			asset.has_soul = true;
 			asset.inspect_home = false;
 			asset.inspect_show_species = false;
+			// 大圣不使用 WorldBox 的等级/经验体系。civ_seal 底盘默认开启该面板，
+			// 但妖属面板没有 i_lifespan 原生节点，开启后会在 UnitStatsElement:64
+			// 空引用。龙属沿用 dragon 底盘本来就是 false；这里显式对齐龙属，
+			// 不影响特质编辑、玄鉴修炼、道途、境界或排行榜。
+			asset.inspect_experience = false;
 			asset.can_be_inspected = true;
 			asset.visible_on_minimap = false;
 			// 龙属该值为 true 且稳定；不再为了绕 UI NRE 改变 ActorAsset 原生能力面。
@@ -910,6 +937,38 @@ internal static class XjYaoShuGreatSageSystem
 		if (!TryFindDefinition(actor, out Definition definition)) return false;
 		sprite = GetGreatSageOverrideSprite(definition, actor);
 		return sprite != null;
+	}
+
+	internal static bool IsGreatSageSubspecies(Subspecies subspecies)
+	{
+		try
+		{
+			string assetId = subspecies?.getActorAsset()?.id ?? string.Empty;
+			return assetId.StartsWith("xj_yaoshu_dasheng_", StringComparison.Ordinal);
+		}
+		catch
+		{
+			return false;
+		}
+	}
+
+	internal static Sprite TryGetBannerSprite(Subspecies subspecies)
+	{
+		try
+		{
+			ActorAsset asset = subspecies?.getActorAsset();
+			if (asset == null) return null;
+			if (VisualFramesByAssetId.TryGetValue(asset.id, out GreatSageVisualFrames frames)
+				&& frames?.Fallback != null)
+			{
+				return frames.Fallback;
+			}
+			return asset._cached_sprite ?? asset.cached_sprite;
+		}
+		catch
+		{
+			return null;
+		}
 	}
 
 	internal static void SyncRenderFrameData(Actor actor, Sprite sprite)
@@ -1230,7 +1289,7 @@ internal static class XjYaoShuGreatSageSystem
 
 	private static bool IsSuitableTile(WorldTile tile, bool preferWater)
 	{
-		if (tile?.Type == null || tile.Type.lava || tile.hasBuilding()) return false;
+		if (tile?.Type == null || tile.Type.lava || tile.hasBuilding() || XjZhantanlinSystem.IsInsideProtectedBoundary(tile)) return false;
 		bool water = tile.Type.ocean || tile.Type.liquid;
 		if (!water)
 		{
@@ -1431,6 +1490,31 @@ internal static class XjYaoShuGreatSageSystem
 
 	internal static bool IsGreatSage(Actor actor) => actor?.data != null && TryFindDefinition(actor, out _);
 
+	internal static bool IsGreatSageRaceKey(string raceKey)
+	{
+		string value = raceKey ?? string.Empty;
+		for (int i = 0; i < Definitions.Length; i++)
+		{
+			if (value.IndexOf(Definitions[i].ActorAssetId, StringComparison.Ordinal) >= 0) return true;
+		}
+		return false;
+	}
+
+	internal static void ObserveConfirmedDeath(in XjDeathSnapshot snapshot, XjDeathCause cause)
+	{
+		if (!snapshot.Found || !IsGreatSageRaceKey(snapshot.RaceKey)) return;
+		if (cause != XjDeathCause.Combat || snapshot.LastAttackerId <= 0L) return;
+		string sageName = string.IsNullOrWhiteSpace(snapshot.Name) ? "妖属大圣" : snapshot.Name;
+		string killerName = string.IsNullOrWhiteSpace(snapshot.LastAttackerName) ? "无名修士" : snapshot.LastAttackerName;
+		string body = killerName + "斩落" + sageName + "，其" + (string.IsNullOrWhiteSpace(snapshot.DaoTu) ? "果位" : snapshot.DaoTu + "果位")
+			+ "映照暂寂；此战记入天地功绩。";
+		XjWorldHistoryStore.RecordDomainEvent(XjWorldHistoryCategory.HighRealm, sageName + "伏诛", body,
+			importance: 4, isProtected: true, actorId: snapshot.ActorId, actorName: sageName,
+			year: snapshot.Year, eventType: "YaoShuGreatSageSlain", mirrorToWorldLog: true);
+		XjBroadcastSystem.ShowRecordedCategorizedWorldTipCritical("【大圣伏诛】" + killerName + "斩落" + sageName + "。",
+			XjAnnouncementCategory.HighRealm, duration: 8f, color: "#D97272");
+	}
+
 	internal static bool TryResolveGreatSageFruit(Actor actor, out string fruit)
 	{
 		fruit = string.Empty;
@@ -1569,10 +1653,82 @@ internal static class XjYaoShuGreatSageSystem
 	private static bool CanAttemptManifestation(Definition definition)
 		=> definition == null || !string.Equals(definition.SlotId, "yuanzhao", StringComparison.Ordinal) || XjYuanZhaoKongZhengEvent.IsTriggered;
 
-	private static bool RollManifestation(Definition definition, int currentYear)
+	private static bool HasManifestationCondition()
 	{
-		long slotSeed = XjDeterministicHash.PositiveHash(0L, "yaoshu.greatsage." + definition.SlotId);
-		return XjDeterministicHash.Roll01(slotSeed, currentYear, "yaoshu_great_sage", "manifest") < ManifestationChance;
+		// 修士缓存只保存当前高境者；逐项排除大圣，保证大圣本身不会反过来满足前置。
+		IReadOnlyList<long> highRealmIds = XjCultivatorCache.GetZhenJunOrHigherIds();
+		int independentCount = 0;
+		for (int i = 0; i < highRealmIds.Count; i++)
+		{
+			if (!XjActorRegistry.ResolveKnownOrWorld(highRealmIds[i], out Actor actor)
+				|| !XjSafeCore.IsAliveActor(actor)
+				|| IsGreatSage(actor)) continue;
+			independentCount++;
+			if (independentCount >= RequiredIndependentZhenJunCount) return true;
+		}
+
+		// getSimpleList 是 WorldBox 的存活单位索引；这里只读取 Count，不枚举人口。
+		IReadOnlyList<Actor> livingUnits = World.world?.units?.getSimpleList();
+		return livingUnits != null && livingUnits.Count >= PopulationManifestationThreshold;
+	}
+
+	private static HashSet<int> SelectManifestationBatch(int currentYear)
+	{
+		List<int> candidates = new List<int>(Definitions.Length);
+		for (int i = 0; i < Definitions.Length; i++)
+		{
+			Definition definition = Definitions[i];
+			SlotState state = States[i];
+			if (state.ActorId > 0L
+				|| currentYear < state.NextAttemptYear
+				|| !CanAttemptManifestation(definition)
+				|| IsFruitHeldByLivingRealActor(definition.FruitId)) continue;
+			candidates.Add(i);
+		}
+
+		candidates.Sort((left, right) =>
+		{
+			long leftSeed = XjDeterministicHash.PositiveHash(currentYear, "yaoshu.batch." + Definitions[left].SlotId);
+			long rightSeed = XjDeterministicHash.PositiveHash(currentYear, "yaoshu.batch." + Definitions[right].SlotId);
+			int compared = leftSeed.CompareTo(rightSeed);
+			return compared != 0 ? compared : left.CompareTo(right);
+		});
+		int batchSize = MinimumManifestationBatchSize
+			+ (int)(XjDeterministicHash.PositiveHash(currentYear, "yaoshu.batch.size")
+				% (MaximumManifestationBatchSize - MinimumManifestationBatchSize + 1));
+		HashSet<int> selected = new HashSet<int>();
+		for (int i = 0; i < candidates.Count && i < batchSize; i++) selected.Add(candidates[i]);
+		return selected;
+	}
+
+	private static bool HasDueManifestationSlot(int currentYear)
+	{
+		for (int i = 0; i < Definitions.Length; i++)
+		{
+			SlotState state = States[i];
+			if (state.ActorId <= 0L
+				&& currentYear >= state.NextAttemptYear
+				&& CanAttemptManifestation(Definitions[i])) return true;
+		}
+		return false;
+	}
+
+	private static bool IsFruitHeldByLivingRealActor(string fruitId)
+	{
+		string target = NormalizeFruit(fruitId);
+		if (target.Length == 0) return false;
+		IReadOnlyList<XjGuoWeiRegistryEntry> entries = XjGuoWeiRegistry.ReadActiveEntries();
+		for (int i = 0; i < entries.Count; i++)
+		{
+			XjGuoWeiRegistryEntry entry = entries[i];
+			if (!entry.Found
+				|| !entry.IsActive
+				|| entry.ActorId <= 0L
+				|| !string.Equals(NormalizeFruit(entry.GuoWei), target, StringComparison.Ordinal)) continue;
+			if (XjActorRegistry.ResolveKnownOrWorld(entry.ActorId, out Actor holder)
+				&& XjSafeCore.IsAliveActor(holder)) return true;
+		}
+		return false;
 	}
 
 	private static void RecordDeparture(Definition definition, long actorId, int currentYear)

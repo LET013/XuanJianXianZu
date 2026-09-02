@@ -234,7 +234,12 @@ internal static class XjNativeTargetSafetyPatches
 			}
 			if (string.Equals(nodeName, "content_more_icons", StringComparison.Ordinal))
 			{
-				return !ownedNodeSeen;
+				// 原生 UnitStatsElement 挂在 content_more_icons 根节点本身；它必须继续
+				// 执行。任何挂在其子节点上的 UnitStatsElement 都只能是旧版玄鉴克隆：
+				// 原生 showContent 会误把该子节点当作整块属性容器，随后找不到
+				// i_lifespan 而在 UnitStatsElement.cs:64 空引用。这里按层级而非
+				// 自定义节点名识别，兼容热重载遗留的改名节点。
+				return ReferenceEquals(current, component.transform);
 			}
 		}
 
@@ -279,6 +284,9 @@ internal static class XjNativeTargetSafetyPatches
 		// 半销毁状态，后续 BatchActors.updateVisibility 可能持续读到残缺引用。
 		// 保留原有两项无争议保护：第三方显式替换事务要完整通过；已经只剩空壳的
 		// 队列项没有可执行的原生销毁语义，继续进入只会重复 NRE。除此之外全部放行。
+		// 真正进入最终销毁边界时，道胎已经没有可靠的原生回退点。这里只做
+		// 只读快照并延后一帧重塑，绝不在 destroyObject 的半销毁事务中 spawn。
+		XjDaoTaiResurrectionSystem.QueueFinalDestruction(pActor);
 		__state = XjExternalUnitTransferContext.IsExplicitReplacementRemoval(pActor);
 		if (__state) return true;
 		if (pActor == null || pActor.data == null) return false;

@@ -20,6 +20,7 @@ using XuanJianVNext.Systems.LongShu;
 using XuanJianVNext.Systems.Talisman;
 using XuanJianVNext.Systems.AutoCollect;
 using XuanJianVNext.Systems.Combat;
+using XuanJianVNext.Systems.YaoShu;
 
 namespace XuanJianVNext.Systems.HighRealm;
 internal static class XjJinDanAccessor

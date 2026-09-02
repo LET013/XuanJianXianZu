@@ -9,6 +9,7 @@ using XuanJianVNext.Systems.Sect;
 using XuanJianVNext.Systems.History.Books;
 using XuanJianVNext.Systems.Events;
 using XuanJianVNext.Systems.Visual;
+using XuanJianVNext.Systems.HighRealm;
 
 namespace XuanJianVNext.Patches;
 
@@ -28,6 +29,16 @@ internal partial class XjVNextPatches
 		catch (System.Exception exception)
 		{
 			XjExceptionDiagnostics.Report("World.MapBox.updateSimulation.AVBS", exception);
+		}
+		try
+		{
+			// 最终销毁后的道胎在本帧原生移除完成后再重塑，避免反向污染
+			// ActorManager 的销毁队列与 BatchActors 可见性索引。
+			XjDaoTaiResurrectionSystem.Tick();
+		}
+		catch (System.Exception exception)
+		{
+			XjExceptionDiagnostics.Report("World.MapBox.updateSimulation.DaoTaiResurrection", exception);
 		}
 		try
 		{
@@ -58,6 +69,7 @@ internal partial class XjVNextPatches
 	[HarmonyPatch(typeof(MapBox), "clearWorld")]
 	public static void XuanJianVNext_MapBox_ClearWorld_ReleasePooledVisuals_Prefix()
 	{
+		XjDaoTaiResurrectionSystem.SetWorldClearing(true);
 		// 原生 clearWorld 会先执行 StackEffects.clear。玄鉴的紫府雾气与
 		// 金丹/道胎光环复用 BaseEffect 对象池，因此必须在原生清池之前
 		// 先 kill() 归还，不能等到下面的 Postfix 再清理。
@@ -80,6 +92,7 @@ internal partial class XjVNextPatches
 		try
 		{
 			XjAvbsTraitPackInterop.ClearRuntime();
+			XjDaoTaiResurrectionSystem.Clear();
 			XjInternalEventBus.PublishWorldCleared();
 		}
 		catch (System.Exception exception)

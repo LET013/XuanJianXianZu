@@ -376,7 +376,7 @@ internal static class XjGuoWeiCalculator
 
 	internal static string GenerateGuoWeiName(string daoTu, string guoWeiType, long seed)
 	{
-		string normalizedDaoTu = (daoTu ?? string.Empty).Trim();
+		string normalizedDaoTu = XjDaoTuIntentIdentity.ResolveCore(daoTu);
 		string normalizedType = NormalizePositionType(guoWeiType);
 		if (string.IsNullOrWhiteSpace(normalizedType) || string.Equals(normalizedType, NoDoor, StringComparison.Ordinal)) return NoDoor;
 		if (string.IsNullOrWhiteSpace(normalizedDaoTu)) return NoDoor;
@@ -479,7 +479,7 @@ internal static class XjGuoWeiCalculator
 
 	internal static string NormalizeDaoTu(string daoTu)
 	{
-		string normalizedDaoTu = (daoTu ?? string.Empty).Trim();
+		string normalizedDaoTu = XjDaoTuIntentIdentity.ResolveCore(daoTu);
 		return !string.IsNullOrWhiteSpace(normalizedDaoTu) && XjDaoTuVisibleTraitCatalog.TryResolveTraitId(normalizedDaoTu, out _)
 			? normalizedDaoTu
 			: string.Empty;

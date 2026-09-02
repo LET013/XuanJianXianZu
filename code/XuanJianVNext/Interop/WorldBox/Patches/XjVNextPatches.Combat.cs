@@ -322,6 +322,13 @@ internal partial class XjVNextPatches
 		ref bool pCheckDamageReduction,
 		ref XjSynchronousCombatDecisionState __state)
 	{
+		if (XjZackObserverErasure.TryResolveDaoTaiContact(__instance, pAttacker))
+		{
+			pDamage = 0f;
+			pCheckDamageReduction = false;
+			return false;
+		}
+
 		XjSynchronousCombatDecision decision = XjSynchronousCombatDecisionKernel.Evaluate(
 			__instance,
 			pDamage,

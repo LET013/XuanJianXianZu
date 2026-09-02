@@ -15,14 +15,11 @@ namespace XuanJianVNext.Systems.Combat;
 /// <summary>
 /// 玄鉴权威寿元结算。
 ///
-/// 原生种族寿命和原生长寿特质不再作为智慧文明角色的寿元来源：
-/// - 尚未进入任何玄鉴境界的凡俗角色固定以八十年为寿元上限；
-/// - 普通修士以八十年凡俗根基叠加当前境界寿元；真君羽士使用小境界给出的完整基础寿限；
-/// - 仅保留玄鉴自己明确登记的出身、血脉、丹药、法宝等寿元来源；
-/// - 龙属使用独立八百年规则，不进入这里。
+/// 原生寿元始终是角色未入玄鉴境界时的权威值；半妖、帝/妖意向等身份
+/// 只使用原生特质乘区，绝不把该值改写成玄鉴的凡俗基数。
 ///
-/// 这样人族、精灵、矮人和兽人不会再因为原生种族模板或原生特质出现
-/// 两套不同的凡俗寿命，同时仍保留玄鉴境界之间的寿元差异。
+/// 只有已具备玄鉴境界或释修寿数的文明角色，才在真实 updateStats 重建中
+/// 投影对应境界寿限。龙属和妖属大圣仍完整交给各自的原生 ActorAsset。
 /// </summary>
 internal static class XjRealmLifespanService
 {
@@ -74,8 +71,8 @@ internal static class XjRealmLifespanService
 
 	/// <summary>
 	/// Called only inside the real Actor.updateStats rebuild, immediately before
-	/// BaseStats.normalize. The assignment is authoritative rather than additive,
-	/// so vanilla race/trait lifespan cannot leak back into the final value.
+	/// BaseStats.normalize. Civilized non-cultivators use the mod's fixed eighty-year
+	/// baseline; non-civilized assets (including dragons and Great Sages) stay native.
 	/// </summary>
 	internal static void ApplyRuntimeRealmLifespan(Actor actor)
 	{
@@ -95,7 +92,13 @@ internal static class XjRealmLifespanService
 
 		string realmId = ResolveExactRealmId(actor);
 		float realmBonus = GetExpectedRealmBonus(actor, realmId);
-		float managedTraitBonus = realmBonus > 0f ? ResolveManagedTraitLifespanBonus(actor) : 0f;
+		if (realmBonus <= 0f)
+		{
+			if (IsMortalCivilian(actor)) actor.stats["lifespan"] = MortalCivilianLifespanYears;
+			return;
+		}
+
+		float managedTraitBonus = ResolveManagedTraitLifespanBonus(actor);
 		actor.stats["lifespan"] = ResolveRealmBaselineLifespan(realmId, realmBonus) + managedTraitBonus;
 	}
 
@@ -108,10 +111,11 @@ internal static class XjRealmLifespanService
 	internal static void ApplyRuntimeRealmLifespanFast(Actor actor, bool hasRuntimeStatInterest, bool bootstrapCandidate)
 	{
 		if (actor?.stats == null) return;
-		// Ordinary actors are clamped once in the updateStats postfix after native
-		// normalization. Writing lifespan both before and after normalize doubled a
-		// BaseStats dictionary mutation on every ordinary stat rebuild.
-		if (!hasRuntimeStatInterest && !bootstrapCandidate) return;
+		if (!hasRuntimeStatInterest && !bootstrapCandidate)
+		{
+			if (IsMortalCivilian(actor)) actor.stats["lifespan"] = MortalCivilianLifespanYears;
+			return;
+		}
 		ApplyRuntimeRealmLifespan(actor);
 	}
 
@@ -120,7 +124,7 @@ internal static class XjRealmLifespanService
 		if (actor?.stats == null) return;
 		if (!hasRuntimeStatInterest && !bootstrapCandidate)
 		{
-			if (IsCivilizedActor(actor)) actor.stats["lifespan"] = MortalCivilianLifespanYears;
+			if (IsMortalCivilian(actor)) actor.stats["lifespan"] = MortalCivilianLifespanYears;
 			return;
 		}
 		ClampFinalMortalCivilianLifespan(actor);
@@ -129,6 +133,7 @@ internal static class XjRealmLifespanService
 	internal static void ClampFinalMortalCivilianLifespan(Actor actor)
 	{
 		if (actor?.stats == null || !IsMortalCivilian(actor)) return;
+
 		actor.stats["lifespan"] = MortalCivilianLifespanYears;
 	}
 
@@ -243,21 +248,27 @@ internal static class XjRealmLifespanService
 			return shiCurrent + 0.01f < shiExpected;
 		}
 
+		float current = XjSafeCore.GetStatSafe(actor, "lifespan", 0f);
 		string realmId = ResolveExactRealmId(actor);
 		float realmBonus = GetExpectedRealmBonus(actor, realmId);
+		if (realmBonus <= 0f)
+		{
+			return IsMortalCivilian(actor)
+				&& (Math.Abs(current - MortalCivilianLifespanYears) > 0.01f
+					|| float.IsNaN(current) || float.IsInfinity(current));
+		}
+
 		float minimumExpected = ResolveRealmBaselineLifespan(realmId, realmBonus)
-			+ (realmBonus > 0f ? ResolveManagedTraitLifespanBonus(actor) : 0f);
-		float current = XjSafeCore.GetStatSafe(actor, "lifespan", 0f);
+			+ ResolveManagedTraitLifespanBonus(actor);
 
 		if (current + 0.01f < minimumExpected)
 		{
 			return true;
 		}
 
-		// No-realm civilians must never retain elf/original-trait lifespan after a
-		// stale cached stat load. Cultivators may legitimately exceed the baseline
-		// through玄鉴丹药、法宝或剑道加成，所以不做上界比较。
-		return realmBonus <= 0f && current > MortalCivilianLifespanYears + 0.01f;
+		// Cultivators may legitimately exceed the baseline through玄鉴丹药、法宝或
+		// 剑道加成，所以不做上界比较。
+		return false;
 	}
 
 	private static string ResolveExactRealmId(Actor actor)
@@ -356,6 +367,19 @@ internal static class XjRealmLifespanService
 		else if (HasTrait(actor, "XjJinDanDescendant")) bonus += 20f;
 		else if (HasTrait(actor, "XjZiFuDescendant")) bonus += 10f;
 		return bonus;
+	}
+
+	private static float ResolveNativeAssetLifespan(Actor actor)
+	{
+		try
+		{
+			float value = actor?.asset?.base_stats?["lifespan"] ?? 0f;
+			return value > 0f && !float.IsNaN(value) && !float.IsInfinity(value) ? value : 0f;
+		}
+		catch
+		{
+			return 0f;
+		}
 	}
 
 	private static bool IsCivilizedActor(Actor actor)

@@ -97,7 +97,7 @@ internal sealed class XjThreeBookStoreCore
 {
 	private static readonly string[] PersonalExpectedEventTypes =
 	{
-		XjThreeBookEventTypes.PersonalBirth, XjThreeBookEventTypes.PersonalAptitude, XjThreeBookEventTypes.PersonalCultivationQualified,
+		XjThreeBookEventTypes.PersonalBirth, XjThreeBookEventTypes.PersonalAptitude, XjThreeBookEventTypes.PersonalHalfYaoBloodline, XjThreeBookEventTypes.PersonalCultivationQualified,
 		XjThreeBookEventTypes.PersonalRealmBreakthrough, XjThreeBookEventTypes.PersonalDongTianJourney, XjThreeBookEventTypes.PersonalDongTianDeath,
 		XjThreeBookEventTypes.PersonalGongFaObtained, XjThreeBookEventTypes.PersonalQiuJinFa, XjThreeBookEventTypes.PersonalFaBaoObtained,
 		XjThreeBookEventTypes.PersonalMentorAccepted, XjThreeBookEventTypes.PersonalStudentAccepted, XjThreeBookEventTypes.PersonalSectFounded,

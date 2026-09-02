@@ -40,7 +40,7 @@ internal static class XjDaoTuVisibleTraitCatalog
 	internal static bool TryResolveTraitId(string daoTu, out string traitId)
 	{
 		traitId = string.Empty;
-		string normalized = Normalize(daoTu);
+		string normalized = Normalize(XjDaoTuIntentIdentity.ResolveCore(daoTu));
 		if (string.IsNullOrEmpty(normalized))
 		{
 			return false;

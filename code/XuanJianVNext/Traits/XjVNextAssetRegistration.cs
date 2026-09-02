@@ -44,16 +44,39 @@ internal static class XjVNextAssetRegistration
 
     private const string SwordIntentSimulatorName = "照剑天心";
     private const string SwordIntentSimulatorInfo = "陆江仙以天鉴照彻剑心，赋予后立即为角色点化一己剑意并为其配剑；天下最多借此补录十六道剑意。";
-    private const string DiMingYangCrownSimulatorName = "帝统明阳";
-    private const string DiMingYangCrownSimulatorInfo = "仅可用于紫府金丹道或服气养性道的明阳修士，神丹不可承帝统。陆江仙拨正人世王位，使其成为当前所属国朝之主；登临人主后转自身道统为唯一帝明阳，并立即开立仙国法统。每名角色终身只能成功使用一次。";
     private const string FaBaoDengXianSimulatorName = "法宝登仙";
     private const string FaBaoDengXianSimulatorInfo = "仅可用于道胎。陆江仙点化其本命法宝，使现有金丹本命法宝同器登仙，器名、本命与道途不改。";
     private const string LuoXiaInquirySimulatorName = "问道落霞";
     private const string LuoXiaInquirySimulatorInfo = "仅在落霞山显世后可用。全世界最多三名角色可成功入门；成功者成为落霞山门人，并强制改承虹霞或戊土道途。释修、帝统与果位钟爱转世不可改纳，失败不消耗名额。";
-    private const string YaoShuGreatSageManifestSimulatorName = "妖圣化生";
-    private const string YaoShuGreatSageManifestSimulatorInfo = "临时检验开关：立即尝试化生全部空缺妖属大圣，跳过三百年门槛、五十年节拍与五成概率；仍严格尊重已被普通修士或存世大圣占据的正位，且渊照寒渊螭仍须待渊照空证成功。此特质会在执行后自行移除。";
-
     internal static readonly IReadOnlyList<XjVNextTraitAssetInfo> TraitAssets = BuildTraitAssets();
+
+    internal static bool IsSystemManagedXuanJianTrait(string traitId)
+    {
+        if (string.IsNullOrWhiteSpace(traitId)) return false;
+
+        for (int i = 0; i < TraitAssets.Count; i++)
+        {
+            XjVNextTraitAssetInfo trait = TraitAssets[i];
+            if (string.Equals(trait.Id, traitId, StringComparison.Ordinal))
+            {
+                return IsManualGrantBlocked(trait);
+            }
+        }
+
+        return false;
+    }
+
+    private static bool IsManualGrantBlocked(in XjVNextTraitAssetInfo trait)
+    {
+        // 编辑器只封锁八枚“玄鉴特质”、独立道途、高境后裔，以及世尊/两系道胎。
+        // 其他玄鉴可见特质保留原有的手动授予入口，不能被一刀切为系统专属。
+        return string.Equals(trait.GroupId, "XuanJianTraits", StringComparison.Ordinal)
+            || string.Equals(trait.GroupId, "XjIndependentDao", StringComparison.Ordinal)
+            || string.Equals(trait.GroupId, "XjHighRealmDescendant", StringComparison.Ordinal)
+            || string.Equals(trait.Id, XjRealmIds.DaoTai, StringComparison.Ordinal)
+            || string.Equals(trait.Id, XjRealmIds.FuQiDaoTai, StringComparison.Ordinal)
+            || string.Equals(trait.Id, XjShiShiZun, StringComparison.Ordinal);
+    }
 
     internal static readonly IReadOnlyList<XjVNextTraitGroupInfo> TraitGroups = new[]
     {
@@ -283,6 +306,8 @@ internal static class XjVNextAssetRegistration
 		// 妖民仍是原生单位；此印只开放修炼，并以原生寿元为基准增至四倍。
 		traits.Add(T("XjYaoShuYaoMin", "XuanJianTraits", "trait/XjYaoShuYaoMin", "XuanJianTrait", 1,
 			Stat("multiplier_lifespan", 3f)));
+		traits.Add(T("XjYaoShuHalfBlood", "XuanJianTraits", "trait/XjYaoShuHalfBlood", "XuanJianTrait", 2,
+			Stat("multiplier_lifespan", 0.5f)));
         traits.Add(T("XjJieLinXian", "XuanJianTraits", "effects/ShenTong/TaiYin/JieLinZhang", "XuanJianTrait", 3,
             Stat("multiplier_health", 0.15f), Stat("multiplier_damage", 0.15f)));
         traits.Add(T("XjYuYiXian", "XuanJianTraits", "effects/ShenTong/TaiYang/YuYiWen", "XuanJianTrait", 3,
@@ -300,11 +325,8 @@ internal static class XjVNextAssetRegistration
         traits.Add(T("DebugMingShu", "DebugTraits", "trait/LuJiangXian", "Debug", 3));
         traits.Add(T("DebugHuiGuang", "DebugTraits", "trait/LuJiangXian", "Debug", 3));
         traits.Add(T("DebugSwordIntent", "DebugTraits", "trait/LuJiangXian", "Debug", 3));
-        traits.Add(T("DebugDiMingYangCrown", "DebugTraits", "trait/LuJiangXian", "Debug", 3));
         traits.Add(T("DebugFaBaoDengXian", "DebugTraits", "trait/LuJiangXian", "Debug", 3));
         traits.Add(T("DebugLuoXiaInquiry", "DebugTraits", "trait/LuJiangXian", "Debug", 3));
-        traits.Add(T("DebugYaoShuGreatSageManifest", "DebugTraits", "trait/LuJiangXian", "Debug", 3));
-
         return traits;
     }
 
@@ -455,11 +477,6 @@ internal static class XjVNextAssetRegistration
             AddRuntimeLocale("trait_DebugSwordIntent_description", SwordIntentSimulatorInfo);
             AddRuntimeLocale("DebugSwordIntent", SwordIntentSimulatorName);
             AddRuntimeLocale("DebugSwordIntent_description", SwordIntentSimulatorInfo);
-            AddRuntimeLocale("trait_DebugDiMingYangCrown", DiMingYangCrownSimulatorName);
-            AddRuntimeLocale("trait_DebugDiMingYangCrown_info", DiMingYangCrownSimulatorInfo);
-            AddRuntimeLocale("trait_DebugDiMingYangCrown_description", DiMingYangCrownSimulatorInfo);
-            AddRuntimeLocale("DebugDiMingYangCrown", DiMingYangCrownSimulatorName);
-            AddRuntimeLocale("DebugDiMingYangCrown_description", DiMingYangCrownSimulatorInfo);
             AddRuntimeLocale("trait_DebugFaBaoDengXian", FaBaoDengXianSimulatorName);
             AddRuntimeLocale("trait_DebugFaBaoDengXian_info", FaBaoDengXianSimulatorInfo);
             AddRuntimeLocale("trait_DebugFaBaoDengXian_description", FaBaoDengXianSimulatorInfo);
@@ -470,19 +487,8 @@ internal static class XjVNextAssetRegistration
                 LuoXiaInquirySimulatorName,
                 LuoXiaInquirySimulatorInfo,
                 "落霞山门人·限三人");
-            AddRuntimeTraitLocale(
-                "DebugYaoShuGreatSageManifest",
-                YaoShuGreatSageManifestSimulatorName,
-                YaoShuGreatSageManifestSimulatorInfo,
-                "陆江仙模拟器·妖属大圣检验");
 			// 调试特质和纪元公告有调用方按原始 ID 直接取词条；同时登记原始键，
 			// 避免 LocalizedTextManager 再把 PascalCase 转成下划线后报 missing text。
-			AddRuntimeRawLocale("trait_DebugYaoShuGreatSageManifest", YaoShuGreatSageManifestSimulatorName);
-			AddRuntimeRawLocale("trait_DebugYaoShuGreatSageManifest_info", YaoShuGreatSageManifestSimulatorInfo);
-			AddRuntimeRawLocale("trait_DebugYaoShuGreatSageManifest_info_2", "陆江仙模拟器·妖属大圣检验");
-			AddRuntimeRawLocale("trait_DebugYaoShuGreatSageManifest_description", YaoShuGreatSageManifestSimulatorInfo);
-			AddRuntimeRawLocale("DebugYaoShuGreatSageManifest", YaoShuGreatSageManifestSimulatorName);
-			AddRuntimeRawLocale("DebugYaoShuGreatSageManifest_description", YaoShuGreatSageManifestSimulatorInfo);
 			AddRuntimeRawLocale("xuanjian_history_broadcast_cultivation_JiYuanChange", "纪元更易");
             AddRuntimeLocale("trait_group_XjFuQiYangXing", "服气养性道");
             AddRuntimeLocale("trait_group_XjShiFoundation", "释修根基");
@@ -511,6 +517,7 @@ internal static class XjVNextAssetRegistration
             AddRuntimeTraitLocale("XjJinXingReincarnation", "金性转世", "服气真人求证失败后，以前世金性护持真灵转生，道途宿慧未泯。", "金性转世");
 			AddRuntimeTraitLocale("XjYaoShuGreatSage", "妖属大圣", "受天数垂顾，寄身鳞羽毛角之间；守一道正位，餐炁养形，俟其道胎。", "正位化形·真君羽士");
 			AddRuntimeTraitLocale("XjYaoShuYaoMin", "妖属妖民", "蒙大圣一炁点化，横骨初炼，渐知吐纳；虽托兽形，亦可问道。", "横骨初炼·可问仙途");
+			AddRuntimeTraitLocale("XjYaoShuHalfBlood", "半妖血脉", "大圣降临，偶有一缕妖炁落入尘寰。此身人妖并生，寿数稍长，根骨自有异禀。", "妖炁入骨·人妖同源");
 			// BaseTrait 直接以原始 ID 拼接 locale key，不会调用 Underscore；仅用 add()
 			// 会把 XjYaoShu... 改成小写下划线，导致特质编辑器仍报 missing text。
 			AddRuntimeRawLocale("trait_XjYaoShuGreatSage", "妖属大圣");
@@ -519,12 +526,18 @@ internal static class XjVNextAssetRegistration
 			AddRuntimeRawLocale("trait_XjYaoShuYaoMin", "妖属妖民");
 			AddRuntimeRawLocale("trait_XjYaoShuYaoMin_info", "蒙大圣一炁点化，横骨初炼，渐知吐纳；虽托兽形，亦可问道。");
 			AddRuntimeRawLocale("trait_XjYaoShuYaoMin_info_2", "横骨初炼·可问仙途");
+			AddRuntimeRawLocale("trait_XjYaoShuHalfBlood", "半妖血脉");
+			AddRuntimeRawLocale("trait_XjYaoShuHalfBlood_info", "大圣降临，偶有一缕妖炁落入尘寰。此身人妖并生，寿数稍长，根骨自有异禀。");
+			AddRuntimeRawLocale("trait_XjYaoShuHalfBlood_info_2", "妖炁入骨·人妖同源");
 			AddRuntimeLocale("xj_yao_shu_great_sage", "妖属大圣");
 			AddRuntimeLocale("xj_yao_shu_great_sage_info", "受天数垂顾，寄身鳞羽毛角之间；守一道正位，餐炁养形，俟其道胎。");
 			AddRuntimeLocale("xj_yao_shu_great_sage_info_2", "正位化形·真君羽士");
 			AddRuntimeLocale("xj_yao_shu_yao_min", "妖属妖民");
 			AddRuntimeLocale("xj_yao_shu_yao_min_info", "蒙大圣一炁点化，横骨初炼，渐知吐纳；虽托兽形，亦可问道。");
 			AddRuntimeLocale("xj_yao_shu_yao_min_info_2", "横骨初炼·可问仙途");
+			AddRuntimeLocale("xj_yao_shu_half_blood", "半妖血脉");
+			AddRuntimeLocale("xj_yao_shu_half_blood_info", "大圣降临，偶有一缕妖炁落入尘寰。此身人妖并生，寿数稍长，根骨自有异禀。");
+			AddRuntimeLocale("xj_yao_shu_half_blood_info_2", "妖炁入骨·人妖同源");
             AddRuntimeLocale("trait_XjLongGengDaoTong", "长庚道途");
             AddRuntimeTraitLocale("XjJieLinXian", "结璘仙", "太阴果位在世时，太阴修士求证失利者偶可受月华结璘，初成不占位序；积修成熟后可证入余位，仙基另有所指者亦可证闰位。", "结璘仙");
             AddRuntimeTraitLocale("XjYuYiXian", "郁仪仙", "太阳果位在世时，太阳紫府求金失利者偶可受日精郁仪，初成不占位序；积修成熟后可证入余位，仙基另有所指者亦可证闰位。", "郁仪仙");
@@ -717,22 +730,9 @@ internal static class XjVNextAssetRegistration
             trait.rate_birth = 0;
             trait.rate_inherit = 0;
             trait.rate_acquire_grow_up = 0;
-			bool hiddenFromMetaEditor = XjManualHighRealmGrantPolicy.IsManualGrantForbiddenTrait(item.Id)
-                || string.Equals(item.Id, XjTrueDamageSystem.JinXingYaoXieDoomTraitId, StringComparison.Ordinal)
-                || string.Equals(item.Id, "XjYiDuiYing", StringComparison.Ordinal)
-                || string.Equals(item.Id, "XjJieLinXian", StringComparison.Ordinal)
-                || string.Equals(item.Id, "XjYuYiXian", StringComparison.Ordinal)
-                || string.Equals(item.Id, XjLongGengDaoTongTrait, StringComparison.Ordinal)
-                || string.Equals(item.Id, XjYuanZhaoDaoTongTrait, StringComparison.Ordinal)
-                || string.Equals(item.Id, XjHongXiaDaoTongTrait, StringComparison.Ordinal)
-                || string.Equals(item.Id, XjLuoXiaShanTrait, StringComparison.Ordinal)
-                || string.Equals(item.Id, XjShiSeed, StringComparison.Ordinal);
-            bool hiddenFromManualGrant = hiddenFromMetaEditor
-                || string.Equals(item.Id, XjLongGengDaoTongTrait, StringComparison.Ordinal)
-                || string.Equals(item.Id, "XjJinXingReincarnation", StringComparison.Ordinal)
-                || string.Equals(item.Id, "ZhanTanLin", StringComparison.Ordinal);
-            trait.can_be_given = !hiddenFromManualGrant;
-            trait.show_in_meta_editor = !hiddenFromMetaEditor;
+			bool blockManualGrant = IsManualGrantBlocked(item);
+			trait.can_be_given = !blockManualGrant;
+			trait.show_in_meta_editor = !blockManualGrant;
             if (item.Rarity >= 0)
             {
                 ((BaseTrait<ActorTrait>)(object)trait).rarity = (Rarity)item.Rarity;
@@ -794,6 +794,12 @@ internal static class XjVNextAssetRegistration
 			trait.special_locale_id = "xj_yao_shu_yao_min";
 			trait.special_locale_description = "xj_yao_shu_yao_min_info";
 			trait.special_locale_description_2 = "xj_yao_shu_yao_min_info_2";
+		}
+		else if (string.Equals(traitId, "XjYaoShuHalfBlood", StringComparison.Ordinal))
+		{
+			trait.special_locale_id = "xj_yao_shu_half_blood";
+			trait.special_locale_description = "xj_yao_shu_half_blood_info";
+			trait.special_locale_description_2 = "xj_yao_shu_half_blood_info_2";
 		}
 	}
 

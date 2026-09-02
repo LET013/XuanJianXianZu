@@ -176,6 +176,21 @@ internal static partial class XjThreeBookWriter
 			2, false, familyId, familyName, sectId, sectName);
 	}
 
+	internal static void RecordHalfYaoBloodline(Actor actor, string greatSageName, int year)
+	{
+		if (actor?.data == null) return;
+		long actorId = ((BaseSystemData)actor.data).id;
+		if (actorId <= 0L) return;
+		ResolveActorAffiliations(actor, out long familyId, out string familyName, out long sectId, out string sectName);
+		string actorName = SafeActorName(actor);
+		string sageName = SafeName(greatSageName, "一尊妖属大圣");
+		RecordPersonal(actorId, actorName, year, XjThreeBookEventTypes.PersonalHalfYaoBloodline,
+			"personal|half-yao-bloodline|" + actorId,
+			XjWorldHistoryCategory.Cultivation, "妖脉", "半妖血脉",
+			actorName + "于" + sageName + "化生之际受一缕妖炁入骨，人妖同源，寿数与根骨自此异于常人。",
+			3, true, familyId, familyName, sectId, sectName);
+	}
+
 	internal static void RecordMentorship(Actor teacher, Actor student, int year)
 	{
 		if (teacher?.data == null || student?.data == null) return;
@@ -1080,4 +1095,3 @@ internal static partial class XjThreeBookWriter
 		return false;
 	}
 }
-

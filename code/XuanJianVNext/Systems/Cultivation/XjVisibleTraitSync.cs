@@ -101,6 +101,7 @@ internal static class XjVisibleTraitSync
 
 	private static readonly string[] RemovedLegacyShiDebugTraitIds =
 	{
+		"DebugYaoShuGreatSageManifest",
 		"DebugEnterGuShi", "DebugEnterJinShi",
 		"DebugShiGreatDesire", "DebugShiWrath", "DebugShiDharmaAdmiration",
 		"DebugShiDiscipline", "DebugShiGoodJoy", "DebugShiCompassion", "DebugShiEmptiness",
@@ -448,9 +449,21 @@ internal static class XjVisibleTraitSync
 		for (int i = 0; i < traitIds.Length; i++)
 		{
 			string traitId = traitIds[i];
-			if (!string.IsNullOrWhiteSpace(traitId) && ActorHasTrait(actor, traitId))
+			if (string.IsNullOrWhiteSpace(traitId)) continue;
+
+			if (ActorHasTrait(actor, traitId))
 			{
 				actor.removeTrait(traitId);
+				changed = true;
+			}
+
+			// 已移除注册的旧调试特质可能只残留在 saved_traits，无法再由
+			// ActorTrait 资源反查。直接修剪持久化标记，防止旧存档留下幽灵特质。
+			if (actor.data.saved_traits == null) continue;
+			for (int savedIndex = actor.data.saved_traits.Count - 1; savedIndex >= 0; savedIndex--)
+			{
+				if (!string.Equals(actor.data.saved_traits[savedIndex], traitId, StringComparison.Ordinal)) continue;
+				actor.data.saved_traits.RemoveAt(savedIndex);
 				changed = true;
 			}
 		}

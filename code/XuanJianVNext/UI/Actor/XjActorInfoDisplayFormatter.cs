@@ -12,6 +12,7 @@ using XuanJianVNext.Systems.HighRealm;
 using XuanJianVNext.Systems.Shi;
 using XuanJianVNext.Systems.WeaponArt;
 using XuanJianVNext.Systems.XianGuo;
+using XuanJianVNext.Systems.YaoShu;
 
 namespace XuanJianVNext.UI.ActorInfo;
 
@@ -41,7 +42,9 @@ internal static class XjActorInfoDisplayFormatter
 			bool isZiJin = XjCultivationPathRules.IsZiFuJinDan(actor);
 			string fuQi = XjFuQiCoreRouter.BuildDisplaySummary(actor);
 			XjActorInfoReadModel model = XjActorInfoReadModel.BuildForActor(actor);
-			formatted = Format(model, bottleneck, isFuQi, isZiJin, fuQi);
+			string daoTuDisplayOverride = XjXianGuoSystem.ResolveDaoTuDisplay(actor,
+				XjYaoShuHalfBloodlineSystem.ResolveDisplayedDaoTu(actor, model.DaoTu));
+			formatted = Format(model, bottleneck, isFuQi, isZiJin, fuQi, daoTuDisplayOverride);
 		}
 		long actorId = actor?.data == null ? 0L : ((BaseSystemData)actor.data).id;
 		XjActorRevisionToken revisionToken = XjActorStateRevisionStore.GetToken(actorId);
@@ -163,7 +166,7 @@ internal static class XjActorInfoDisplayFormatter
 
 	internal static string Format(in XjActorInfoReadModel model)
 	{
-		return Format(in model, string.Empty, false, false, string.Empty);
+		return Format(in model, string.Empty, false, false, string.Empty, string.Empty);
 	}
 
 	private static string Format(
@@ -171,7 +174,8 @@ internal static class XjActorInfoDisplayFormatter
 		string bottleneckSummary,
 		bool isFuQi,
 		bool isZiJin,
-		string fuQiSummary)
+		string fuQiSummary,
+		string daoTuDisplayOverride)
 	{
 		if (!model.Found)
 		{
@@ -216,7 +220,8 @@ internal static class XjActorInfoDisplayFormatter
 			}
 			if (isFuQi || CanShowEstablishedDaoTu(model.RealmId) || !string.IsNullOrWhiteSpace(model.DaoTu))
 			{
-				AppendLine(builder, "道途", XjDisplayNameSanitizer.GameTerm(model.DaoTu, "无道途"));
+				string displayedDaoTu = string.IsNullOrWhiteSpace(daoTuDisplayOverride) ? model.DaoTu : daoTuDisplayOverride;
+				AppendLine(builder, "道途", XjDisplayNameSanitizer.GameTerm(displayedDaoTu, "无道途"));
 				if (usesFruitPositionTemplate)
 				{
 					string guoWeiBlessing = ResolveGuoWeiBlessing(model.DaoTu);
@@ -226,11 +231,12 @@ internal static class XjActorInfoDisplayFormatter
 			AppendOptionalRealLine(builder, "纪元加成", model.EraBonusSummary);
 		}
 
-		if (isZiJin && IsRealSummary(model.XianJiSummary))
+		if (isZiJin)
 		{
 			string xianJiLabel = ResolveXianJiLabel(model.RealmId);
 			AppendSection(builder, xianJiLabel);
-			AppendWrappedListField(builder, xianJiLabel, model.XianJiSummary);
+			AppendWrappedListField(builder, xianJiLabel,
+				IsRealSummary(model.XianJiSummary) ? model.XianJiSummary : "暂无神通");
 		}
 
 		AppendSection(builder, "修炼");

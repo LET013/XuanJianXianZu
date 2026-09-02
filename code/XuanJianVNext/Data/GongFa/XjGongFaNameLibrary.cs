@@ -1,5 +1,7 @@
 ﻿using System;
 
+using XuanJianVNext.Data.Cultivation;
+
 namespace XuanJianVNext.Data.GongFa;
 
 internal static class XjGongFaNameLibrary
@@ -499,7 +501,7 @@ internal static class XjGongFaNameLibrary
 
 	private static string NormalizeDaoTu(string daoTu)
 	{
-		string text = (daoTu ?? string.Empty).Trim();
+		string text = XjDaoTuIntentIdentity.ResolveCore(daoTu);
 		if (string.IsNullOrWhiteSpace(text)
 			|| string.Equals(text, "基础", StringComparison.Ordinal)
 			|| string.Equals(text, "玄门", StringComparison.Ordinal)
@@ -664,4 +666,3 @@ internal readonly struct XjGongFaState
 		ReasonCode = reasonCode ?? string.Empty;
 	}
 }
-

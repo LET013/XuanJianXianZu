@@ -135,6 +135,12 @@ internal static partial class XjJinDanBreakthroughSystem
 			XjActorAccessor.SetString(actor, XjActorDataKeys.XjJinDanDeferredReason, "XianGuoFalseJinDanCap");
 			return;
 		}
+		if (XjXianGuoSystem.IsFruitAttemptSuppressedForHeir(actor))
+		{
+			XjQiuJinIntentSystem.Clear(actor);
+			XjActorAccessor.SetString(actor, XjActorDataKeys.XjJinDanDeferredReason, "XianGuoHeirFruitLine");
+			return;
+		}
 
 		XjJinDanState jinDanState = XjJinDanAccessor.BuildState(actor);
 		if (jinDanState.Found)
@@ -208,6 +214,13 @@ internal static partial class XjJinDanBreakthroughSystem
 		}
 
 		string candidateGuoWeiType = XjGuoWeiCalculator.Calculate(actor, snapshot.DaoTu, xianJiState);
+		// 正果叩门时确认已有活着的持位者，才会写入这项人物决意；之后仍沿
+		// 原有金丹/果位事务，只把本道的下一次目标改为余位，不启用跨道途兜底。
+		if (string.Equals(candidateGuoWeiType, XjGuoWeiCalculator.ZhengWei, StringComparison.Ordinal)
+			&& IsPursuingResidualPosition(actor))
+		{
+			candidateGuoWeiType = XjGuoWeiCalculator.YuWei;
+		}
 		// 帝明阳是正统明阳仙法：最终高境席位只允许本道果位或余位。
 		// 闰位、神丹与任何未知分支都不能成为帝明阳的成丹出口。
 		if (XjXianGuoSystem.IsDiMingYang(actor)
@@ -398,6 +411,14 @@ internal static partial class XjJinDanBreakthroughSystem
 
 			if (availabilityReason == XjGuoWeiAvailabilityReason.Occupied)
 			{
+				if (string.Equals(guoWeiType, XjGuoWeiCalculator.ZhengWei, StringComparison.Ordinal))
+				{
+					SwitchToResidualPositionPursuit(actor);
+					XjGuoWeiOwnerProbeEvent.TryRevealOnOccupiedAttempt(
+						actor, jinDanDaoTu, guoWeiType, currentYear);
+					RecordDeferredAttempt(actor, "ZhengWeiOccupiedTurnYuWei");
+					return;
+				}
 				if (XjZiJinSwordDaoCatalog.IsLongGeng(jinDanDaoTu))
 				{
 					RecordDeferredAttempt(actor, "LongGengYuWeiOccupied");
@@ -554,6 +575,19 @@ internal static partial class XjJinDanBreakthroughSystem
 			actor,
 			XjActorDataKeys.XjJinDanDeferredReason,
 			normalizedReason);
+	}
+
+	private static bool IsPursuingResidualPosition(Actor actor)
+	{
+		return actor?.data != null
+			&& XjActorAccessor.TryGetString(actor, XjActorDataKeys.XjJinDanPositionPursuit, out string pursuit)
+			&& string.Equals((pursuit ?? string.Empty).Trim(), XjGuoWeiCalculator.YuWei, StringComparison.Ordinal);
+	}
+
+	private static void SwitchToResidualPositionPursuit(Actor actor)
+	{
+		if (actor?.data == null) return;
+		XjActorAccessor.SetString(actor, XjActorDataKeys.XjJinDanPositionPursuit, XjGuoWeiCalculator.YuWei);
 	}
 
 	private static void ResolveAttemptFailure(

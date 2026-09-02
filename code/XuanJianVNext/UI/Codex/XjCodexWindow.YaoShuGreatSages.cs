@@ -42,18 +42,6 @@ internal sealed partial class XjCodexWindow
 			{
 				GUILayout.Label("本次显世：" + FormatYaoShuYear(item.LastManifestationYear), GUI.skin.label);
 			}
-			else
-			{
-				GUILayout.Label(
-					"最近显世：" + FormatYaoShuYear(item.LastManifestationYear)
-					+ "　最近归寂：" + FormatYaoShuYear(item.LastDepartureYear),
-					GUI.skin.label);
-				GUILayout.Label(
-					item.NextAttemptYear > 0
-						? "<color=#B8C6D8>下一次可判定</color>　世界" + item.NextAttemptYear + "年"
-						: "<color=#B8C6D8>等待下一次显世条件</color>",
-					GUI.skin.label);
-			}
 
 			GUILayout.EndVertical();
 			GUILayout.Space(6f);

@@ -7,6 +7,7 @@ using XuanJianVNext.Systems.Cultivation;
 using XuanJianVNext.Systems.Events;
 using XuanJianVNext.Systems.HighRealm;
 using XuanJianVNext.Systems.Shi;
+using XuanJianVNext.Traits;
 
 namespace XuanJianVNext.Patches;
 
@@ -180,6 +181,15 @@ internal static class XjNativeTraitMutationPatches
             || !XjYinSiTraitLifecycle.ShouldAllowVisibleGrant(actor, traitId)
             || XjJianDaoCompatibility.ShouldBlockTraitGrant(actor, traitId))
         {
+            return false;
+        }
+
+        if (XjManualTraitEditContext.IsActive
+            && !XjCultivationStateTransitions.IsVisibleTraitSyncActive
+            && XjVNextAssetRegistration.IsSystemManagedXuanJianTrait(traitId))
+        {
+            // 玄鉴特质是修炼、身份和世界事件的可见投影；编辑器只能查看，
+            // 不能直接写入角色。系统同步路径不受这一手动入口约束。
             return false;
         }
 
