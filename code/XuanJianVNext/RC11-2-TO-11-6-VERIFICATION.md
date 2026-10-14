@@ -8,7 +8,7 @@
 | --- | --- | --- |
 | 世谱与玄鉴纪年 | `Systems/History/XjChronology.cs`、`XjCenturyAnnalsBuilder.cs`、`XjCenturyAnnalsStore.cs` | 已用持久化绝对世界年做玄鉴历基准、按完整百年分卷；已有旧档日历与旧世谱修复分支；旧存档/三千年地图仍须实机导入检验 |
 | 成胎概率 | `Systems/HighRealm/XjDaoTaiAscensionSystem.cs` | 当前为基础 10%、权柄加成后至多 30%；无天霞前置狙击。RC11.2 临时 20% 被 RC11.3 后续规则替代，不应恢复 |
-| 阴阳与群法 | `Systems/Combat/XjCombatDamageResolver.cs`、`XjTaiYinNonAggressionPolicy.cs`、`Data/HighRealm/XjJinDanDaoSpellCatalog.cs` | 已找到太阳必中对闪避的处理、太阴不主动交战的保护和例外、太阴低血闪避与十二炁/并古组合技定义；独立“太阳 ×3”的完整生效乘区本轮**未证明**，不能把必中当三倍伤害 |
+| 阴阳与群法 | `Systems/Actor/XjActorRuntimeStatProjection.cs`、`Systems/Combat/XjCombatDamageResolver.cs`、`XjTaiYinNonAggressionPolicy.cs`、`Data/HighRealm/XjJinDanDaoSpellCatalog.cs` | 已确认太阳在 `updateStats` 最终战斗面板应用 `ApplyTaiYangCombatStatScalar`（固定 ×3，不乘寿元、道慧、命数与模型尺寸），统一伤害结算器再以 `taiYangAlwaysHits` 令闪避率为零；太阴不争保护、低血闪避、十二炁/并古组合技有对应规则。仍须实机验证最终倍率和战斗调用链 |
 | 并火道慧 | `Systems/Aptitude/XjDaoHuiPolicy.cs`、`Systems/HighRealm/XjHighRealmDaoStateService.cs` | 并火的有效道慧惩罚及高境修持调用有源码证据；没有运行百年平衡样本 |
 | 古今释修高境 | `Systems/Shi/XjShiHighRealmSystem.cs`、`XjShiDomainState.cs`、`XjAncientShiTempleSystem.cs` | 已有金地、法相、世尊路径、失败/冷却、古释寺庙与旧档回填逻辑；未做实机跨代可达性统计 |
 | 人丹与五神通 | `Systems/HighRealm/XjRenDan.cs`、`XjRenDan.Plans.cs` | 第 4/5 神通窗口各自独立 50% 计划判定；受目标家族、境界、占用与时限限制；仍须高人口运行以统计成功/截走/掺假分支 |
@@ -37,7 +37,7 @@
 - 旧地图的第一卷世谱必须从实际玄鉴起录年起算，不重复造出几十卷虚假的旧世纪。
 - 在世的古释/今释和转换身份后的角色，筛选图标、境界列、姓名列完全一致；旧残留特质不得误入旧道统或仙修境界筛选。
 - 摩诃主动转世、高境真灵被斩、普通今释归土、技术性角色移除各做一次独立场景，检验全世界公告次数与三书记录。
-- 太阳绝对命中、太阴低血闪避/不主动攻击、道胎越境压制的实际命中链和全来源伤害乘区；“太阳 ×3”必须专项验证，不能从文案推定生效。
+- 太阳 `ApplyTaiYangCombatStatScalar ×3` 与 `taiYangAlwaysHits` 分别已有明确实现；仍必须通过实机前后属性对比和实际命中统计，确认数值重建仅结算一次，且全来源伤害调用链没有重复乘区。太阴低血闪避/不主动攻击、道胎越境压制也需同步实机核对。
 - 人丹第 4/5 独立窗口、同道途异族筑基、目标被截走/掺假/无目标、五十年到期，以及死亡/晋境时计划解除与副作用。
 - 龙属洞天清修速度/死亡后清理、古释世尊/今释九世可达、金地/果位意象旧档还原。
 
