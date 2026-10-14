@@ -174,6 +174,7 @@ private static void RefreshTraitFilters(IReadOnlyList<Actor> actors)
 		{
 			Actor actor = actors[i];
 			if (actor?.data == null) continue;
+			bool isShi = XjCultivationPathRules.IsShi(actor);
 			if (actor.traits != null)
 			{
 				foreach (ActorTrait trait in actor.traits)
@@ -182,17 +183,21 @@ private static void RefreshTraitFilters(IReadOnlyList<Actor> actors)
 					// 释修道统、境界特质是持久状态的投影；跳过旧档残留图标。
 					// 下方统一从权威释修档案补入正确入口。
 					if (XjShiCatalog.TryResolveRealmByTrait(trait.id, out _)
-						|| XjShiCatalog.TryResolveTraditionByTrait(trait.id, out _)) continue;
+						|| XjShiCatalog.TryResolveTraditionByTrait(trait.id, out _)
+						|| (isShi && IsAuthoritativeRealmTrait(trait.id))) continue;
 					traitIds.Add(trait.id);
 				}
 			}
-			string realmId = XjRealmHelper.GetUnifiedId(actor, XjRealmHelper.GetTraitSnapshotForRouter);
-			if (string.Equals(realmId, XjRealmIds.ZhenJunYuShi, StringComparison.Ordinal)) traitIds.Add("XjRealm13");
-			if (string.Equals(realmId, XjRealmIds.DaoTai, StringComparison.Ordinal)) traitIds.Add("XjRealm6");
-			if (string.Equals(realmId, XjRealmIds.FuQiDaoTai, StringComparison.Ordinal)) traitIds.Add("XjRealm14");
+			if (!isShi)
+			{
+				string realmId = XjRealmHelper.GetUnifiedId(actor, XjRealmHelper.GetTraitSnapshotForRouter);
+				if (string.Equals(realmId, XjRealmIds.ZhenJunYuShi, StringComparison.Ordinal)) traitIds.Add("XjRealm13");
+				if (string.Equals(realmId, XjRealmIds.DaoTai, StringComparison.Ordinal)) traitIds.Add("XjRealm6");
+				if (string.Equals(realmId, XjRealmIds.FuQiDaoTai, StringComparison.Ordinal)) traitIds.Add("XjRealm14");
+			}
 			// 释修的 RealmId 是独立体系，不能用仙修等效境界推断其真实层次。
 			// 从同一份权威档案创建筛选图标，旧档可见特质未刷新时也能查到。
-			if (TryResolveShiFilterIdentity(actor, out string shiRealm, out string shiTradition))
+			if (isShi && TryResolveShiFilterIdentity(actor, out string shiRealm, out string shiTradition))
 			{
 				string shiRealmTrait = XjShiCatalog.GetRealmTraitId(shiRealm);
 				string shiTraditionTrait = XjShiCatalog.GetTraditionTraitId(shiTradition);
@@ -296,7 +301,9 @@ private static bool ActorMatchesTraitFilter(Actor actor, string traitId)
 		// 否则一个残留/手动错误图标会把角色放进错误境界筛选。
 		if (IsAuthoritativeRealmTrait(traitId))
 		{
-			return string.Equals(realmId, traitId, StringComparison.Ordinal);
+			// 释修用于战斗压制的仙修等效 RealmId 不是本人真实修炼境界。
+			return !XjCultivationPathRules.IsShi(actor)
+				&& string.Equals(realmId, traitId, StringComparison.Ordinal);
 		}
 		// 残留可见特质不可压过持久化释修身份。先验明道统/境界，
 		// 再检查普通技能、百艺等可自由持有的特质。
