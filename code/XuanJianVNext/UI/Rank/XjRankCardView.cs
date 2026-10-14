@@ -110,8 +110,7 @@ internal sealed class XjRankCardView : MonoBehaviour, IPointerEnterHandler, IPoi
 		if (string.IsNullOrWhiteSpace(text)) return string.Empty;
 		string[] markers =
 		{
-			"-道胎", "-真君羽士", "-郁仪仙", "-结璘仙", "-胎息", "-炼气", "-练气", "-筑基", "-黄冠", "-紫府", "-真人", "-金丹", "-神丹",
-			"-僧侣", "-法师", "-怜愍", "-摩诃", "-法相", "-世尊"
+			"-道胎", "-真君羽士", "-郁仪仙", "-结璘仙", "-胎息", "-炼气", "-练气", "-筑基", "-黄冠", "-紫府", "-真人", "-金丹", "-神丹"
 		};
 		for (int i = 0; i < markers.Length; i++)
 		{

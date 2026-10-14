@@ -90,10 +90,9 @@ internal static class XjShiDeathLifecycle
 
 		string anchorName = XjShiDomainState.TryGet(domainId, out XjShiDomainRecord returnDomain)
 			? XjShiDomainCatalog.GetDomainDisplayName(returnDomain) : "所系承载地";
-		bool highRealmAnnihilationAnnounced = trueSpiritAnnihilated
+		if (trueSpiritAnnihilated
 			&& cause != XjDeathCause.TechnicalRemoval
-			&& realmRank >= XjShiCatalog.GetRank(XjShiRealmIds.MoHe);
-		if (highRealmAnnihilationAnnounced)
+			&& realmRank >= XjShiCatalog.GetRank(XjShiRealmIds.MoHe))
 		{
 			XjShiAnnouncementSystem.OnHighRealmTrueSpiritAnnihilated(
 				deathSnapshot.Name,
@@ -102,19 +101,10 @@ internal static class XjShiDeathLifecycle
 		}
 		if (isModern)
 		{
-			// 同一场高位真灵俱灭只能有一条天下公告。三书履历仍必须完整写入，
-			// 不因播报去重而丢失真灵终局及无法重塑的证据。
-			// 主动摩诃轮回由 OnMoHeReincarnationBegun 统一播报；技术性移除
-			// 不是可播报的天下战报。二者仍保留完整释门与三书终局状态。
-			if (!highRealmAnnihilationAnnounced
-				&& !voluntaryMoHeReincarnation
-				&& cause != XjDeathCause.TechnicalRemoval)
-			{
-				XjShiAnnouncementSystem.OnTrueSpiritResult(deathSnapshot.Name,
-					returned: returnQueued && !trueSpiritAnnihilated,
-					annihilated: trueSpiritAnnihilated, anchorName: anchorName,
-					attackerName: deathSnapshot.LastAttackerName);
-			}
+			XjShiAnnouncementSystem.OnTrueSpiritResult(deathSnapshot.Name,
+				returned: returnQueued && !trueSpiritAnnihilated,
+				annihilated: trueSpiritAnnihilated, anchorName: anchorName,
+				attackerName: deathSnapshot.LastAttackerName);
 			XjThreeBookWriter.RecordShiTrueSpiritResult(actor, year,
 				returned: returnQueued && !trueSpiritAnnihilated,
 				annihilated: trueSpiritAnnihilated, anchorName: anchorName);
