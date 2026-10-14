@@ -7,6 +7,8 @@ using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.EventSystems;
 using XuanJianVNext.Data.Rules;
+using XuanJianVNext.Data.Shi;
+using XuanJianVNext.Systems.Shi;
 using XuanJianVNext.Systems.Cultivation;
 using XuanJianVNext.UI.Common;
 using XuanJianVNext.Systems.Rank;
@@ -176,13 +178,27 @@ private static void RefreshTraitFilters(IReadOnlyList<Actor> actors)
 			{
 				foreach (ActorTrait trait in actor.traits)
 				{
-					if (trait != null && !string.IsNullOrWhiteSpace(trait.id)) traitIds.Add(trait.id);
+					if (trait == null || string.IsNullOrWhiteSpace(trait.id)) continue;
+					// 释修道统、境界特质是持久状态的投影；跳过旧档残留图标。
+					// 下方统一从权威释修档案补入正确入口。
+					if (XjShiCatalog.TryResolveRealmByTrait(trait.id, out _)
+						|| XjShiCatalog.TryResolveTraditionByTrait(trait.id, out _)) continue;
+					traitIds.Add(trait.id);
 				}
 			}
 			string realmId = XjRealmHelper.GetUnifiedId(actor, XjRealmHelper.GetTraitSnapshotForRouter);
 			if (string.Equals(realmId, XjRealmIds.ZhenJunYuShi, StringComparison.Ordinal)) traitIds.Add("XjRealm13");
 			if (string.Equals(realmId, XjRealmIds.DaoTai, StringComparison.Ordinal)) traitIds.Add("XjRealm6");
 			if (string.Equals(realmId, XjRealmIds.FuQiDaoTai, StringComparison.Ordinal)) traitIds.Add("XjRealm14");
+			// 释修的 RealmId 是独立体系，不能用仙修等效境界推断其真实层次。
+			// 从同一份权威档案创建筛选图标，旧档可见特质未刷新时也能查到。
+			if (XjShiState.TryBuildSnapshot(actor, out XjShiSnapshot shi))
+			{
+				string shiRealmTrait = XjShiCatalog.GetRealmTraitId(shi.Realm);
+				string shiTraditionTrait = XjShiCatalog.GetTraditionTraitId(shi.Tradition);
+				if (!string.IsNullOrWhiteSpace(shiRealmTrait)) traitIds.Add(shiRealmTrait);
+				if (!string.IsNullOrWhiteSpace(shiTraditionTrait)) traitIds.Add(shiTraditionTrait);
+			}
 		}
 		List<string> ordered = new List<string>(traitIds);
 		ordered.Sort(StringComparer.Ordinal);
@@ -282,16 +298,19 @@ private static bool ActorMatchesTraitFilter(Actor actor, string traitId)
 		{
 			return string.Equals(realmId, traitId, StringComparison.Ordinal);
 		}
-		if (actor.hasTrait(traitId)) return true;
-		if (string.Equals(traitId, "XjGuShiDao", StringComparison.Ordinal)
-			|| string.Equals(traitId, "XjJinShiDao", StringComparison.Ordinal))
+		// 残留可见特质不可压过持久化释修身份。先验明道统/境界，
+		// 再检查普通技能、百艺等可自由持有的特质。
+		if (XjShiCatalog.TryResolveTraditionByTrait(traitId, out string shiTradition))
 		{
-			if (!XuanJianVNext.Systems.ActorSystem.XjActorAccessor.TryGetString(
-				actor, XjActorDataKeys.ShiTradition, out string tradition)) return false;
-			return string.Equals(traitId, "XjGuShiDao", StringComparison.Ordinal)
-				? string.Equals(tradition, XuanJianVNext.Data.Shi.XjShiTraditionIds.Ancient, StringComparison.Ordinal)
-				: string.Equals(tradition, XuanJianVNext.Data.Shi.XjShiTraditionIds.Modern, StringComparison.Ordinal);
+			return XjShiState.TryBuildSnapshot(actor, out XjShiSnapshot traditionSnapshot)
+				&& string.Equals(traditionSnapshot.Tradition, shiTradition, StringComparison.Ordinal);
 		}
+		if (XjShiCatalog.TryResolveRealmByTrait(traitId, out string shiRealm))
+		{
+			return XjShiState.TryBuildSnapshot(actor, out XjShiSnapshot realmSnapshot)
+				&& string.Equals(realmSnapshot.Realm, shiRealm, StringComparison.Ordinal);
+		}
+		if (actor.hasTrait(traitId)) return true;
 		return false;
 	}
 private static bool IsAuthoritativeRealmTrait(string traitId)
