@@ -104,7 +104,11 @@ internal static class XjShiDeathLifecycle
 		{
 			// 同一场高位真灵俱灭只能有一条天下公告。三书履历仍必须完整写入，
 			// 不因播报去重而丢失真灵终局及无法重塑的证据。
-			if (!highRealmAnnihilationAnnounced)
+			// 主动摩诃轮回由 OnMoHeReincarnationBegun 统一播报；技术性移除
+			// 不是可播报的天下战报。二者仍保留完整释门与三书终局状态。
+			if (!highRealmAnnihilationAnnounced
+				&& !voluntaryMoHeReincarnation
+				&& cause != XjDeathCause.TechnicalRemoval)
 			{
 				XjShiAnnouncementSystem.OnTrueSpiritResult(deathSnapshot.Name,
 					returned: returnQueued && !trueSpiritAnnihilated,
