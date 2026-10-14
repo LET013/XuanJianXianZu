@@ -90,9 +90,10 @@ internal static class XjShiDeathLifecycle
 
 		string anchorName = XjShiDomainState.TryGet(domainId, out XjShiDomainRecord returnDomain)
 			? XjShiDomainCatalog.GetDomainDisplayName(returnDomain) : "所系承载地";
-		if (trueSpiritAnnihilated
+		bool highRealmAnnihilationAnnounced = trueSpiritAnnihilated
 			&& cause != XjDeathCause.TechnicalRemoval
-			&& realmRank >= XjShiCatalog.GetRank(XjShiRealmIds.MoHe))
+			&& realmRank >= XjShiCatalog.GetRank(XjShiRealmIds.MoHe);
+		if (highRealmAnnihilationAnnounced)
 		{
 			XjShiAnnouncementSystem.OnHighRealmTrueSpiritAnnihilated(
 				deathSnapshot.Name,
@@ -101,10 +102,15 @@ internal static class XjShiDeathLifecycle
 		}
 		if (isModern)
 		{
-			XjShiAnnouncementSystem.OnTrueSpiritResult(deathSnapshot.Name,
-				returned: returnQueued && !trueSpiritAnnihilated,
-				annihilated: trueSpiritAnnihilated, anchorName: anchorName,
-				attackerName: deathSnapshot.LastAttackerName);
+			// 同一场高位真灵俱灭只能有一条天下公告。三书履历仍必须完整写入，
+			// 不因播报去重而丢失真灵终局及无法重塑的证据。
+			if (!highRealmAnnihilationAnnounced)
+			{
+				XjShiAnnouncementSystem.OnTrueSpiritResult(deathSnapshot.Name,
+					returned: returnQueued && !trueSpiritAnnihilated,
+					annihilated: trueSpiritAnnihilated, anchorName: anchorName,
+					attackerName: deathSnapshot.LastAttackerName);
+			}
 			XjThreeBookWriter.RecordShiTrueSpiritResult(actor, year,
 				returned: returnQueued && !trueSpiritAnnihilated,
 				annihilated: trueSpiritAnnihilated, anchorName: anchorName);
