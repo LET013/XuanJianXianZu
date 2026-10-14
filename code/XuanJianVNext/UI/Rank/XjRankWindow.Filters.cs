@@ -8,7 +8,7 @@ using UnityEngine.UI;
 using UnityEngine.EventSystems;
 using XuanJianVNext.Data.Rules;
 using XuanJianVNext.Data.Shi;
-using XuanJianVNext.Systems.Shi;
+using XuanJianVNext.Systems.ActorSystem;
 using XuanJianVNext.Systems.Cultivation;
 using XuanJianVNext.UI.Common;
 using XuanJianVNext.Systems.Rank;
@@ -192,10 +192,10 @@ private static void RefreshTraitFilters(IReadOnlyList<Actor> actors)
 			if (string.Equals(realmId, XjRealmIds.FuQiDaoTai, StringComparison.Ordinal)) traitIds.Add("XjRealm14");
 			// 释修的 RealmId 是独立体系，不能用仙修等效境界推断其真实层次。
 			// 从同一份权威档案创建筛选图标，旧档可见特质未刷新时也能查到。
-			if (XjShiState.TryBuildSnapshot(actor, out XjShiSnapshot shi))
+			if (TryResolveShiFilterIdentity(actor, out string shiRealm, out string shiTradition))
 			{
-				string shiRealmTrait = XjShiCatalog.GetRealmTraitId(shi.Realm);
-				string shiTraditionTrait = XjShiCatalog.GetTraditionTraitId(shi.Tradition);
+				string shiRealmTrait = XjShiCatalog.GetRealmTraitId(shiRealm);
+				string shiTraditionTrait = XjShiCatalog.GetTraditionTraitId(shiTradition);
 				if (!string.IsNullOrWhiteSpace(shiRealmTrait)) traitIds.Add(shiRealmTrait);
 				if (!string.IsNullOrWhiteSpace(shiTraditionTrait)) traitIds.Add(shiTraditionTrait);
 			}
@@ -302,16 +302,27 @@ private static bool ActorMatchesTraitFilter(Actor actor, string traitId)
 		// 再检查普通技能、百艺等可自由持有的特质。
 		if (XjShiCatalog.TryResolveTraditionByTrait(traitId, out string shiTradition))
 		{
-			return XjShiState.TryBuildSnapshot(actor, out XjShiSnapshot traditionSnapshot)
-				&& string.Equals(traditionSnapshot.Tradition, shiTradition, StringComparison.Ordinal);
+			return TryResolveShiFilterIdentity(actor, out _, out string currentTradition)
+				&& string.Equals(currentTradition, shiTradition, StringComparison.Ordinal);
 		}
 		if (XjShiCatalog.TryResolveRealmByTrait(traitId, out string shiRealm))
 		{
-			return XjShiState.TryBuildSnapshot(actor, out XjShiSnapshot realmSnapshot)
-				&& string.Equals(realmSnapshot.Realm, shiRealm, StringComparison.Ordinal);
+			return TryResolveShiFilterIdentity(actor, out string currentRealm, out _)
+				&& string.Equals(currentRealm, shiRealm, StringComparison.Ordinal);
 		}
 		if (actor.hasTrait(traitId)) return true;
 		return false;
+	}
+// 排行榜有千名角色时不为图标筛选反复构造全量释修快照。
+private static bool TryResolveShiFilterIdentity(Actor actor, out string realm, out string tradition)
+	{
+		realm = string.Empty;
+		tradition = string.Empty;
+		if (actor?.data == null || !XjCultivationPathRules.IsShi(actor)) return false;
+		return XjActorAccessor.TryGetString(actor, XjActorDataKeys.ShiRealm, out realm)
+			&& XjActorAccessor.TryGetString(actor, XjActorDataKeys.ShiTradition, out tradition)
+			&& XjShiCatalog.IsKnownRealm(realm)
+			&& XjShiCatalog.IsKnownTradition(tradition);
 	}
 private static bool IsAuthoritativeRealmTrait(string traitId)
 	{
